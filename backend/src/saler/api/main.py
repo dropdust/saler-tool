@@ -13,7 +13,21 @@ from loguru import logger
 
 from saler import __version__
 from saler.api.errors import ApiError
-from saler.api.routes import ai, backup, graph, jobs, llm, seeds, settings
+from saler.api.routes import (
+    ai,
+    backup,
+    companies,
+    crawl,
+    domains,
+    exclusion_rules,
+    graph,
+    jobs,
+    llm,
+    search_providers,
+    seeds,
+    settings,
+    suppressions,
+)
 from saler.core.errors import (
     DomainError,
     Duplicate,
@@ -108,4 +122,10 @@ def create_app(
     app.include_router(ai.router, prefix=API_PREFIX)
     app.include_router(llm.router, prefix=API_PREFIX)
     app.include_router(backup.router, prefix=API_PREFIX)
+    app.include_router(crawl.router, prefix=API_PREFIX)
+    app.include_router(domains.router, prefix=API_PREFIX)
+    app.include_router(companies.router, prefix=API_PREFIX)
+    app.include_router(search_providers.router, prefix=API_PREFIX)
+    app.include_router(exclusion_rules.router, prefix=API_PREFIX)
+    app.include_router(suppressions.router, prefix=API_PREFIX)
     return app

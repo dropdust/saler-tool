@@ -121,3 +121,118 @@ def seed_to_dict(seed) -> dict[str, Any]:
         "created_at": iso(seed.created_at),
         "updated_at": iso(seed.updated_at),
     }
+
+
+def crawl_job_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "scope": row.scope or {},
+        "config": row.config or {},
+        "status": row.status,
+        "stats": row.stats or {},
+        "started_at": iso(row.started_at),
+        "finished_at": iso(row.finished_at),
+        "created_at": iso(row.created_at),
+    }
+
+
+def domain_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "domain": row.domain,
+        "homepage_url": row.homepage_url,
+        "title": row.title,
+        "snippet": row.snippet,
+        "source": row.source,
+        "status": row.status,
+        "attempts": row.attempts,
+        "last_error": row.last_error,
+        "fetched_pages": row.fetched_pages,
+        "country": row.country,
+        "country_source": row.country_source,
+        "language": row.language,
+        "language_source": row.language_source,
+        "is_excluded": row.is_excluded,
+        "exclusion_reason": row.exclusion_reason,
+        "company_id": row.company_id,
+        "last_crawled_at": iso(row.last_crawled_at),
+        "created_at": iso(row.created_at),
+    }
+
+
+def company_to_dict(row, *, domain: str | None = None, contacts_count: int | None = None) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "country": row.country,
+        "language": row.language,
+        "status": row.status,
+        "is_excluded": row.is_excluded,
+        "exclusion_reason": row.exclusion_reason,
+        "tags": row.tags or [],
+        "source": row.source,
+        "note": row.note,
+        "domain": domain,
+        "contacts_count": contacts_count or 0,
+        "created_at": iso(row.created_at),
+        "updated_at": iso(row.updated_at),
+    }
+
+
+def contact_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "company_id": row.company_id,
+        "domain_id": row.domain_id,
+        "type": row.type,
+        "value": row.value,
+        "value_normalized": row.value_normalized,
+        "category": row.category,
+        "source_url": row.source_url,
+        "validity": row.validity,
+        "is_primary": row.is_primary,
+        "created_at": iso(row.created_at),
+    }
+
+
+def search_provider_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "type_key": row.type_key,
+        "name": row.name,
+        "endpoint": row.endpoint,
+        "priority": row.priority,
+        "enabled": row.enabled,
+        "params": row.params or {},
+        "used_today": row.used_today,
+        "used_today_date": row.used_today_date,
+        "health": row.health,
+        "last_test_at": iso(row.last_test_at),
+        "last_test_result": row.last_test_result,
+    }
+
+
+def exclusion_rule_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "rule_type": row.rule_type,
+        "pattern": row.pattern,
+        "enabled": row.enabled,
+        "note": row.note,
+        "created_at": iso(row.created_at),
+    }
+
+
+def suppression_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "scope": row.scope,
+        "target_value": row.target_value,
+        "reason": row.reason,
+        "company_id": row.company_id,
+        "contact_id": row.contact_id,
+        "source": row.source,
+        "note": row.note,
+        "created_at": iso(row.created_at),
+    }
