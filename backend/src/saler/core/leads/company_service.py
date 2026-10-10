@@ -8,9 +8,36 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Query, Session
 
 from saler.core.errors import NotFound, ValidationFailed
-from saler.db.models import Company, Contact, Domain
+from saler.db.models import Company, Contact, Domain, SendRecord
+from saler.db.models.leads import COMPANY_STATUSES
 
 COMPANY_FIELDS = {"name", "country", "language", "status", "tags", "note", "is_excluded", "exclusion_reason"}
+
+#: 获进展/无效状态：状态变更即时作用于跟进与排除逻辑（FR-054）
+PROGRESS_EXCLUDED_STATUSES = ("replied", "won", "lost", "invalid")
+
+
+def mark_status(db: Session, company_id: int, status: str) -> Company:
+    """客户状态推进（FR-054）：标记已回复/已成交/已拒绝/无效时立即终止其待发记录。
+
+    待发（pending）记录就地置为 skipped（台账留痕，重试不误发）；
+    后续跟进轮次与新计划的人群圈选同样即时排除。
+    """
+    if status not in COMPANY_STATUSES:
+        raise ValidationFailed(f"非法客户状态：{status}")
+    company = get_company(db, company_id)
+    company.status = status
+    if status in PROGRESS_EXCLUDED_STATUSES:
+        pending = (
+            db.query(SendRecord)
+            .filter_by(company_id=company_id, status="pending")
+            .all()
+        )
+        for record in pending:
+            record.status = "skipped"
+            record.skip_reason = f"company_{status}"
+    db.commit()
+    return company
 
 
 def get_or_create_company_for_domain(

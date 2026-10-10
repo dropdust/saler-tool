@@ -156,9 +156,11 @@ def get_company(company_id: int, db: Session = Depends(get_session)) -> dict:
 
 @router.put("/{company_id}")
 def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_session)) -> dict:
-    company = company_service.update_company(
-        db, company_id, **payload.model_dump(exclude_none=True)
-    )
+    fields = payload.model_dump(exclude_none=True)
+    new_status = fields.pop("status", None)
+    company = company_service.update_company(db, company_id, **fields)
+    if new_status is not None and new_status != company.status:
+        company = company_service.mark_status(db, company_id, new_status)  # FR-054 即时联动
     return _company_view(db, company)
 
 
