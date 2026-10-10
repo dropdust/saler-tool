@@ -1,8 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import MainLayout from '../layouts/MainLayout.vue'
 
-const Placeholder = () => import('../views/placeholder/PlaceholderView.vue')
-
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -112,7 +110,24 @@ const router = createRouter({
           component: () => import('../views/channels/ChannelList.vue'),
           meta: { title: '营销通道' },
         },
-        { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
+        {
+          path: 'campaigns',
+          name: 'campaigns',
+          component: () => import('../views/campaigns/CampaignMonitor.vue'),
+          meta: { title: '营销计划' },
+        },
+        {
+          path: 'campaigns/:id/records',
+          name: 'campaign-records',
+          component: () => import('../views/campaigns/RecordTable.vue'),
+          meta: { title: '发送台账' },
+        },
+        {
+          path: 'campaigns/:id/report',
+          name: 'campaign-report',
+          component: () => import('../views/campaigns/Report.vue'),
+          meta: { title: '计划报表' },
+        },
         {
           path: 'settings',
           name: 'settings',
@@ -136,6 +151,12 @@ const router = createRouter({
           name: 'settings-search',
           component: () => import('../views/settings/SearchProviders.vue'),
           meta: { title: '检索渠道' },
+        },
+        {
+          path: 'settings/suppressions',
+          name: 'settings-suppressions',
+          component: () => import('../views/settings/Suppressions.vue'),
+          meta: { title: '退订黑名单' },
         },
       ],
     },

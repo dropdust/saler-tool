@@ -296,3 +296,92 @@ export interface ChannelManifest {
   secret_fields: string[]
   presets: Record<string, Record<string, unknown>>
 }
+
+export interface CampaignRoundRow {
+  id: number
+  campaign_id: number
+  round_no: number
+  content_theme_id: number | null
+  interval_days: number | null
+  condition: string
+  status: 'pending' | 'running' | 'done' | 'cancelled'
+  stats: Record<string, number>
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface CampaignRow {
+  id: number
+  name: string
+  status: 'draft' | 'running' | 'paused' | 'completed' | 'cancelled'
+  content_theme_id: number | null
+  audience: Record<string, unknown>
+  lang_strategy: 'auto' | 'fixed'
+  fixed_lang: string | null
+  fallback_lang: string | null
+  schedule: Record<string, unknown>
+  estimate: Record<string, unknown>
+  stats: Record<string, number>
+  started_at: string | null
+  finished_at: string | null
+  created_at: string | null
+  updated_at: string | null
+  rounds?: CampaignRoundRow[]
+  channels?: Array<{ channel_id: number; role: string; name: string | null }>
+  active_job_id?: number | null
+}
+
+export interface SendRecordRow {
+  id: number
+  campaign_id: number
+  round_no: number
+  company_id: number
+  company_name: string | null
+  contact_id: number
+  contact_value: string
+  channel_id: number | null
+  channel_name: string | null
+  content_variant_id: number | null
+  content_version_id: number | null
+  lang_used: string | null
+  fallback_used: boolean
+  status: 'pending' | 'sent' | 'failed' | 'bounced' | 'skipped' | 'suppressed'
+  skip_reason: string | null
+  error_code: string | null
+  error_message: string | null
+  scheduled_at: string | null
+  sent_at: string | null
+  created_at: string | null
+}
+
+export interface EstimateRow {
+  audience_count: number
+  message_count: number
+  by_lang: Record<string, number>
+  by_channel: Record<string, number>
+  fallback_count: number
+  suppressed: number
+  skipped: number
+  eta_minutes: number
+  daily_capacity: number | null
+}
+
+export interface CampaignReportRow {
+  campaign: { id: number; name: string; status: string; started_at: string | null; finished_at: string | null }
+  totals: Record<string, number>
+  by_channel: Record<string, Record<string, number>>
+  by_lang: Record<string, Record<string, number>>
+  by_round: Record<string, Record<string, number>>
+}
+
+export interface SuppressionRow {
+  id: number
+  scope: 'email' | 'phone' | 'contact' | 'company' | 'domain'
+  target_value: string
+  reason: 'unsubscribed' | 'bounced' | 'manual' | 'complaint' | 'invalid'
+  company_id: number | null
+  contact_id: number | null
+  source: string | null
+  note: string | null
+  created_at: string | null
+}
