@@ -6,7 +6,7 @@
     >
       <template #actions>
         <el-button type="primary" @click="openCreate">新建种子</el-button>
-        <el-button type="success" plain @click="aiDialog?.open()">AI 扩充</el-button>
+        <el-button type="success" plain @click="openAiExpand">AI 扩充</el-button>
         <el-button :disabled="!selected.length" @click="openTranslate">
           翻译选中（{{ selected.length }}）
         </el-button>
@@ -198,6 +198,7 @@ import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
 import AiExpandDialog from './AiExpandDialog.vue'
 import { LANGS, PRIORITY_LABELS, SOURCE_LABELS, langLabel } from '../../constants'
+import { useAiGate } from '../../composables/useAiGate'
 
 const filters = ref({
   q: '',
@@ -216,6 +217,11 @@ const loading = ref(false)
 const selected = ref<Seed[]>([])
 const nodes = ref<GraphNode[]>([])
 const aiDialog = ref<InstanceType<typeof AiExpandDialog>>()
+const { refresh: refreshAiGate, requireAi } = useAiGate()
+
+async function openAiExpand() {
+  if (await requireAi()) aiDialog.value?.open()
+}
 
 const nodesById = computed(() => {
   const map: Record<number, GraphNode> = {}
@@ -326,7 +332,8 @@ const translateVisible = ref(false)
 const translateTargets = ref<string[]>([])
 const translating = ref(false)
 
-function openTranslate() {
+async function openTranslate() {
+  if (!(await requireAi())) return
   translateTargets.value = []
   translateVisible.value = true
 }
@@ -361,7 +368,7 @@ onMounted(async () => {
   if (route.query.market_id) {
     filters.value.market_id = Number(route.query.market_id)
   }
-  await loadNodes()
+  await Promise.all([loadNodes(), refreshAiGate()])
   await load()
 })
 </script>
