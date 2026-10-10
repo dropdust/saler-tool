@@ -141,11 +141,11 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 - [x] T067 [US2] API：`backend/src/saler/api/routes/companies.py`（列表/修订/合并/contacts/import/export；FR-027~029）
 - [x] T068 [US2] API：`backend/src/saler/api/routes/search_providers.py`（CRUD/测试；密钥只写不读回）
 - [x] T069 [US2] API：`backend/src/saler/api/routes/exclusion_rules.py`（CRUD + 对存量重跑 apply）
-- [ ] T070 [P] [US2] 前端：挖掘任务页（创建向导、SSE 进度、日志、暂停恢复）`frontend/src/views/leads/CrawlJobs.vue`
-- [ ] T071 [P] [US2] 前端：候选域名列表（状态筛选、人工排除/恢复）`frontend/src/views/leads/DomainList.vue`
-- [ ] T072 [P] [US2] 前端：公司列表与详情（联系方式、纠错补录、合并、状态标记）`frontend/src/views/leads/CompanyList.vue`、`frontend/src/views/leads/CompanyDetail.vue`
-- [ ] T073 [P] [US2] 前端：检索渠道配置页（按 config_schema 动态表单、测试、优先级排序）`frontend/src/views/settings/SearchProviders.vue`
-- [ ] T074 [US2] 前端：导入导出与排除规则界面 `frontend/src/views/leads/ImportExport.vue`、`frontend/src/views/leads/ExclusionRules.vue`
+- [x] T070 [P] [US2] 前端：挖掘任务页（创建向导、SSE 进度、日志、暂停恢复）`frontend/src/views/leads/CrawlJobs.vue`
+- [x] T071 [P] [US2] 前端：候选域名列表（状态筛选、人工排除/恢复）`frontend/src/views/leads/DomainList.vue`
+- [x] T072 [P] [US2] 前端：公司列表与详情（联系方式、纠错补录、合并、状态标记）`frontend/src/views/leads/CompanyList.vue`、`frontend/src/views/leads/CompanyDetail.vue`
+- [x] T073 [P] [US2] 前端：检索渠道配置页（按 config_schema 动态表单、测试、优先级排序）`frontend/src/views/settings/SearchProviders.vue`
+- [x] T074 [US2] 前端：导入导出与排除规则界面 `frontend/src/views/leads/ImportExport.vue`、`frontend/src/views/leads/ExclusionRules.vue`
 - [ ] T075 [US2] 对照 quickstart S6/S7 手工验证，并在 `specs/001-sales-tool/quickstart.md` 勾注结论
 
 **Checkpoint**: US2 可独立演示——从种子到可导出的联系方式列表
