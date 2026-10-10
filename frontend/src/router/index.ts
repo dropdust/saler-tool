@@ -76,6 +76,18 @@ const router = createRouter({
           component: () => import('../views/leads/DomainList.vue'),
           meta: { title: '候选域名' },
         },
+        {
+          path: 'leads/import-export',
+          name: 'leads-io',
+          component: () => import('../views/leads/ImportExport.vue'),
+          meta: { title: '导入与导出' },
+        },
+        {
+          path: 'leads/exclusions',
+          name: 'leads-exclusions',
+          component: () => import('../views/leads/ExclusionRules.vue'),
+          meta: { title: '排除规则' },
+        },
         { path: 'content', component: Placeholder, meta: { title: '营销内容（后续里程碑）' } },
         { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },

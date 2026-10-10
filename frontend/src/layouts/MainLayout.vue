@@ -20,6 +20,8 @@
           <el-menu-item index="/leads">客户列表</el-menu-item>
           <el-menu-item index="/leads/jobs">挖掘任务</el-menu-item>
           <el-menu-item index="/leads/domains">候选域名</el-menu-item>
+          <el-menu-item index="/leads/import-export">导入与导出</el-menu-item>
+          <el-menu-item index="/leads/exclusions">排除规则</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/content">
           <el-icon><Document /></el-icon><span>营销内容</span>
