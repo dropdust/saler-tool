@@ -82,6 +82,22 @@ def edge_to_dict(edge) -> dict[str, Any]:
     }
 
 
+def llm_provider_to_dict(row) -> dict[str, Any]:
+    """LLM 服务公开投影：密钥永不出现（只写不读回，FR-006）。"""
+    return {
+        "id": row.id,
+        "name": row.name,
+        "provider_type": row.provider_type,
+        "base_url": row.base_url,
+        "model": row.model,
+        "params": row.params or {},
+        "is_default": row.is_default,
+        "health": row.health,
+        "last_test_at": iso(row.last_test_at),
+        "last_test_result": row.last_test_result,
+    }
+
+
 def seed_to_dict(seed) -> dict[str, Any]:
     return {
         "id": seed.id,
