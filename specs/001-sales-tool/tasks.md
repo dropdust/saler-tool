@@ -191,21 +191,21 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 ### Tests for User Story 4 ⚠️（先写，确认失败）
 
-- [ ] T091 [P] [US4] 单元测试：变量渲染（未知/缺失变量告警、签名注入）与语言匹配回退（fallback_used）`backend/tests/unit/test_content_render.py`
-- [ ] T092 [P] [US4] 契约测试：版本/发布/归档/恢复=新版本；未发布内容在计划 API 被拒 `backend/tests/contract/test_content_api.py`
-- [ ] T093 [P] [US4] 集成测试：S8 全流程 `backend/tests/integration/test_us4_content_flow.py`
+- [x] T091 [P] [US4] 单元测试：变量渲染（未知/缺失变量告警、签名注入）与语言匹配回退（fallback_used）`backend/tests/unit/test_content_render.py`
+- [x] T092 [P] [US4] 契约测试：版本/发布/归档/恢复=新版本；未发布内容在计划 API 被拒 `backend/tests/contract/test_content_api.py`
+- [x] T093 [P] [US4] 集成测试：S8 全流程 `backend/tests/integration/test_us4_content_flow.py`
 
 ### Implementation for User Story 4
 
-- [ ] T094 [US4] 内容服务：`backend/src/saler/core/content/service.py`（主题/语言版本/版本号/状态机；恢复历史=生成新版本；FR-037）
-- [ ] T095 [US4] 渲染器：`backend/src/saler/core/content/render.py`（`{{var}}` 解析/渲染/告警；变量清单入 content_version.variables；contracts/data-exchange.md §5）
-- [ ] T096 [US4] 语言匹配：`backend/src/saler/core/content/match.py`（auto/fixed/fallback 策略与 fallback 标注；FR-036）
-- [ ] T097 [US4] AI 内容服务：`backend/src/saler/core/content/ai.py`（content_draft_v1 母版起草/润色；content_translation_v1 主题级多语言生成，复用图谱词表术语；结果一律进 draft/review；FR-038）
-- [ ] T098 [US4] API：`backend/src/saler/api/routes/content.py`（themes/variants/versions/publish/archive/restore/preview）
-- [ ] T099 [P] [US4] 前端：内容主题列表与状态总览 `frontend/src/views/content/ThemeList.vue`
-- [ ] T100 [US4] 前端：版本编辑器（Markdown、变量插入、实时预览与告警）`frontend/src/views/content/VariantEditor.vue`
-- [ ] T101 [US4] 前端：AI 起草/翻译对话框与多语言对照视图 `frontend/src/views/content/AiContentDialog.vue`
-- [ ] T102 [US4] 前端：版本历史与恢复 `frontend/src/views/content/VersionHistory.vue`
+- [x] T094 [US4] 内容服务：`backend/src/saler/core/content/service.py`（主题/语言版本/版本号/状态机；恢复历史=生成新版本；FR-037）
+- [x] T095 [US4] 渲染器：`backend/src/saler/core/content/render.py`（`{{var}}` 解析/渲染/告警；变量清单入 content_version.variables；contracts/data-exchange.md §5）
+- [x] T096 [US4] 语言匹配：`backend/src/saler/core/content/match.py`（auto/fixed/fallback 策略与 fallback 标注；FR-036）
+- [x] T097 [US4] AI 内容服务：`backend/src/saler/core/content/ai.py`（content_draft_v1 母版起草/润色；content_translation_v1 主题级多语言生成，复用图谱词表术语；结果一律进 draft/review；FR-038）
+- [x] T098 [US4] API：`backend/src/saler/api/routes/content.py`（themes/variants/versions/publish/archive/restore/preview）
+- [x] T099 [P] [US4] 前端：内容主题列表与状态总览 `frontend/src/views/content/ThemeList.vue`
+- [x] T100 [US4] 前端：版本编辑器（Markdown、变量插入、实时预览与告警）`frontend/src/views/content/VariantEditor.vue`
+- [x] T101 [US4] 前端：AI 起草/翻译对话框与多语言对照视图 `frontend/src/views/content/AiContentDialog.vue`
+- [x] T102 [US4] 前端：版本历史与恢复 `frontend/src/views/content/VersionHistory.vue`
 - [ ] T103 [US4] 对照 quickstart S8 手工验证，并在 `specs/001-sales-tool/quickstart.md` 勾注结论
 
 **Checkpoint**: US4 可独立演示——多语言营销内容生产就绪
