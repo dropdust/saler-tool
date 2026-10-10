@@ -107,3 +107,92 @@ export interface OverviewPayload {
   nodes: OverviewNode[]
   edges: OverviewEdge[]
 }
+
+export interface DomainRow {
+  id: number
+  domain: string
+  homepage_url: string | null
+  title: string | null
+  snippet: string | null
+  source: string | null
+  status: 'pending' | 'fetching' | 'done' | 'no_contact' | 'failed'
+  attempts: number
+  last_error: string | null
+  fetched_pages: number
+  country: string | null
+  country_source: string | null
+  language: string | null
+  language_source: string | null
+  is_excluded: boolean
+  exclusion_reason: string | null
+  company_id: number | null
+  last_crawled_at: string | null
+  created_at: string | null
+}
+
+export interface CompanyRow {
+  id: number
+  name: string | null
+  country: string | null
+  language: string | null
+  status: 'new' | 'contacted' | 'replied' | 'won' | 'lost' | 'invalid'
+  is_excluded: boolean
+  exclusion_reason: string | null
+  tags: string[]
+  source: string
+  note: string | null
+  domain: string | null
+  contacts_count: number
+  created_at: string | null
+  updated_at: string | null
+  contacts?: ContactRow[]
+}
+
+export interface ContactRow {
+  id: number
+  company_id: number
+  domain_id: number | null
+  type: string
+  value: string
+  value_normalized: string
+  category: string
+  source_url: string | null
+  validity: string
+  is_primary: boolean
+  created_at: string | null
+}
+
+export interface CrawlJobRow {
+  id: number
+  name: string | null
+  scope: { seed_ids?: number[] | null }
+  config: Record<string, unknown>
+  status: string
+  stats: Record<string, number>
+  started_at: string | null
+  finished_at: string | null
+  created_at: string | null
+}
+
+export interface SearchProviderRow {
+  id: number
+  type_key: string
+  name: string
+  endpoint: string | null
+  priority: number
+  enabled: boolean
+  params: Record<string, unknown>
+  used_today: number
+  health: 'unknown' | 'healthy' | 'failing'
+  last_test_at: string | null
+  last_test_result: string | null
+}
+
+export interface ExclusionRuleRow {
+  id: number
+  rule_type: 'keyword' | 'domain' | 'list'
+  pattern: string
+  enabled: boolean
+  note: string | null
+  created_at: string | null
+}

@@ -52,7 +52,12 @@ const router = createRouter({
           component: () => import('../views/seeds/ImportExport.vue'),
           meta: { title: '导入与回灌' },
         },
-        { path: 'leads', component: Placeholder, meta: { title: '客户线索（后续里程碑）' } },
+        {
+          path: 'leads/jobs',
+          name: 'leads-jobs',
+          component: () => import('../views/leads/CrawlJobs.vue'),
+          meta: { title: '挖掘任务' },
+        },
         { path: 'content', component: Placeholder, meta: { title: '营销内容（后续里程碑）' } },
         { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
