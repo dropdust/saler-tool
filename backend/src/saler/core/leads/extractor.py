@@ -92,7 +92,8 @@ def classify_email(local_part: str) -> str:
     return "other"
 
 
-def _clean_email(raw: str) -> str | None:
+def normalize_email(raw: str) -> str | None:
+    """规范化邮箱；返回 None 表示应丢弃（资源伪邮箱/角色噪声/格式错误）。"""
     value = raw.strip().strip(".,;:()<>\"'").lower()
     if value.count("@") != 1:
         return None
@@ -105,6 +106,9 @@ def _clean_email(raw: str) -> str | None:
     if local in DROP_LOCAL_PARTS:
         return None
     return f"{local}@{domain}"
+
+
+_clean_email = normalize_email  # 兼容内部旧引用
 
 
 def _is_suspicious(domain: str) -> bool:

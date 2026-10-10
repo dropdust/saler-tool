@@ -21,6 +21,7 @@ dependencies = [
     "loguru>=0.7.2",
     "platformdirs>=4.2",
     "aiosmtplib>=3.0",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
