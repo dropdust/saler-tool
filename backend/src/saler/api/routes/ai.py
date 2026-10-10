@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from saler.api.deps import get_session
+from saler.core.content.ai import run_content_draft, run_content_translate
 from saler.core.llm_utils import resolve_llm_provider
 from saler.core.seeds.ai import run_expansion
 from saler.core.seeds.ai_translate import run_translate_seeds, run_translate_terms
@@ -78,6 +79,54 @@ async def translate_terms(
     manager.start(
         job_id,
         lambda ctx: run_translate_terms(
+            ctx, request.app.state.session_factory, provider, payload=payload.model_dump()
+        ),
+    )
+    return {"job_id": job_id}
+
+
+class ContentDraftRequest(BaseModel):
+    provider_id: int | None = None
+    theme_id: int
+    brief: str
+    tone: str | None = None
+
+
+class ContentTranslateRequest(BaseModel):
+    provider_id: int | None = None
+    theme_id: int
+    master_variant_id: int | None = None
+    targets: list[str] = Field(default_factory=list)
+
+
+@router.post("/content/draft", status_code=202)
+async def content_draft(
+    payload: ContentDraftRequest, request: Request, db: Session = Depends(get_session)
+) -> dict:
+    provider = resolve_llm_provider(db, payload.provider_id)
+    manager = request.app.state.job_manager
+    job_id = manager.create("ai_content_draft", name="AI 起草母版", params=payload.model_dump())
+    manager.start(
+        job_id,
+        lambda ctx: run_content_draft(
+            ctx, request.app.state.session_factory, provider, payload=payload.model_dump()
+        ),
+    )
+    return {"job_id": job_id}
+
+
+@router.post("/content/translate", status_code=202)
+async def content_translate(
+    payload: ContentTranslateRequest, request: Request, db: Session = Depends(get_session)
+) -> dict:
+    provider = resolve_llm_provider(db, payload.provider_id)
+    manager = request.app.state.job_manager
+    job_id = manager.create(
+        "ai_content_translate", name="主题级多语言生成", params=payload.model_dump()
+    )
+    manager.start(
+        job_id,
+        lambda ctx: run_content_translate(
             ctx, request.app.state.session_factory, provider, payload=payload.model_dump()
         ),
     )

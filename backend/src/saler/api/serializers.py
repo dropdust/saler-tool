@@ -236,3 +236,44 @@ def suppression_to_dict(row) -> dict[str, Any]:
         "note": row.note,
         "created_at": iso(row.created_at),
     }
+
+
+def content_theme_to_dict(row, *, variants_count: int = 0) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "content_type": row.content_type,
+        "master_lang": row.master_lang,
+        "description": row.description,
+        "variants_count": variants_count,
+        "created_at": iso(row.created_at),
+        "updated_at": iso(row.updated_at),
+    }
+
+
+def content_version_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "variant_id": row.variant_id,
+        "version_no": row.version_no,
+        "subject": row.subject,
+        "body_md": row.body_md,
+        "variables": row.variables or [],
+        "change_note": row.change_note,
+        "created_by": row.created_by,
+        "created_at": iso(row.created_at),
+    }
+
+
+def content_variant_to_dict(variant, *, current=None) -> dict[str, Any]:
+    return {
+        "id": variant.id,
+        "theme_id": variant.theme_id,
+        "lang": variant.lang,
+        "status": variant.status,
+        "source": variant.source,
+        "parent_variant_id": variant.parent_variant_id,
+        "current": content_version_to_dict(current) if current is not None else None,
+        "created_at": iso(variant.created_at),
+        "updated_at": iso(variant.updated_at),
+    }
