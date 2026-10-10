@@ -22,7 +22,9 @@
           size="small"
           type="danger"
           @click="control('cancel')"
-        >取消</el-button>
+        >
+          取消
+        </el-button>
       </template>
       <el-progress :percentage="progressPercent" :stroke-width="14" :format="() => progressText" />
       <div class="logs">

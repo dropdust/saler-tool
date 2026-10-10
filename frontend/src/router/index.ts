@@ -53,6 +53,18 @@ const router = createRouter({
           meta: { title: '导入与回灌' },
         },
         {
+          path: 'leads',
+          name: 'leads',
+          component: () => import('../views/leads/CompanyList.vue'),
+          meta: { title: '客户列表' },
+        },
+        {
+          path: 'leads/companies/:id',
+          name: 'leads-company-detail',
+          component: () => import('../views/leads/CompanyDetail.vue'),
+          meta: { title: '客户详情' },
+        },
+        {
           path: 'leads/jobs',
           name: 'leads-jobs',
           component: () => import('../views/leads/CrawlJobs.vue'),
