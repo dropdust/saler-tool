@@ -106,7 +106,12 @@ const router = createRouter({
           component: () => import('../views/content/VersionHistory.vue'),
           meta: { title: '版本历史' },
         },
-        { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
+        {
+          path: 'channels',
+          name: 'channels',
+          component: () => import('../views/channels/ChannelList.vue'),
+          meta: { title: '营销通道' },
+        },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
         {
           path: 'settings',

@@ -240,3 +240,59 @@ export interface PublishedVariantRow {
   lang: string
   subject: string | null
 }
+
+export interface ChannelRow {
+  id: number
+  name: string
+  channel_type: 'email' | 'sms'
+  config: Record<string, unknown>
+  identity: Record<string, string | null>
+  daily_limit: number
+  rate_per_minute: number
+  concurrency: number
+  status: 'active' | 'disabled'
+  health: 'unknown' | 'healthy' | 'failing'
+  last_check_at: string | null
+  last_check_result: string | null
+  used_today: number
+  used_today_date: string | null
+  total_sent: number
+  secret_set: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ChannelUsageRow {
+  used_today: number
+  daily_limit: number
+  rate_per_minute: number
+  concurrency: number
+  remaining_today: number | null
+  total_sent: number
+  health: string
+  status: string
+  last_check_at: string | null
+  last_check_result: string | null
+}
+
+export interface SchemaProperty {
+  type?: string
+  title?: string
+  format?: string
+  enum?: string[]
+  default?: unknown
+  description?: string
+  examples?: string[]
+}
+
+export interface ChannelManifest {
+  kind: 'mail' | 'sms'
+  type_key: string
+  display_name: string
+  config_schema: {
+    properties?: Record<string, SchemaProperty>
+    required?: string[]
+  }
+  secret_fields: string[]
+  presets: Record<string, Record<string, unknown>>
+}
