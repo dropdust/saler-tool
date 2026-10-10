@@ -110,7 +110,7 @@ async def run_content_draft(
                 source="llm_assisted",
             )
         else:
-            version = content_service.update_variant_content(
+            content_service.update_variant_content(
                 db,
                 master.id,
                 subject=data.get("subject"),

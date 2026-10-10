@@ -5,12 +5,8 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
 
-T = TypeVar("T")
-
-
-def _pick(variants: dict[str, T], lang: str | None) -> str | None:
+def _pick[T](variants: dict[str, T], lang: str | None) -> str | None:
     if not lang:
         return None
     lang = lang.lower()
@@ -20,7 +16,7 @@ def _pick(variants: dict[str, T], lang: str | None) -> str | None:
     return main if main in variants else None
 
 
-def choose_variant(
+def choose_variant[T](
     variants: dict[str, T],
     *,
     customer_lang: str | None,
