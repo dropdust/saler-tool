@@ -246,26 +246,26 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 ### Tests for User Story 6 ⚠️（先写，确认失败）
 
-- [ ] T114 [P] [US6] 单元测试：人群圈选与预估（数量、语言/通道分布、ETA 按限额推算）`backend/tests/unit/test_audience_estimate.py`
-- [ ] T115 [P] [US6] 单元测试：防重唯一键 `UNIQUE(campaign_id, round_no, contact_id)`、退订/排除命中即 skipped/suppressed、失败重试不改唯一键 `backend/tests/unit/test_send_guard.py`
-- [ ] T116 [P] [US6] 集成测试：S10 全链路 + 多轮跟进（未回复者进入下一轮，已标记回复者排除）`backend/tests/integration/test_us6_campaign_flow.py`
+- [x] T114 [P] [US6] 单元测试：人群圈选与预估（数量、语言/通道分布、ETA 按限额推算）`backend/tests/unit/test_audience_estimate.py`
+- [x] T115 [P] [US6] 单元测试：防重唯一键 `UNIQUE(campaign_id, round_no, contact_id)`、退订/排除命中即 skipped/suppressed、失败重试不改唯一键 `backend/tests/unit/test_send_guard.py`
+- [x] T116 [P] [US6] 集成测试：S10 全链路 + 多轮跟进（未回复者进入下一轮，已标记回复者排除）`backend/tests/integration/test_us6_campaign_flow.py`
 
 ### Implementation for User Story 6
 
-- [ ] T117 [US6] 人群解析：`backend/src/saler/core/campaigns/audience.py`（筛选条件→send_record(pending) 物化；排除 suppression/exclusion/已有触达；FR-046/050）
-- [ ] T118 [US6] 预估服务：`backend/src/saler/core/campaigns/estimate.py`（客户数/条数/语言通道分布/时长；FR-047）
-- [ ] T119 [US6] 计划与轮次服务：`backend/src/saler/core/campaigns/service.py`（状态机 draft→running⇄paused→completed/cancelled；轮次配置；仅可选已发布内容；FR-046/052/053）
-- [ ] T120 [US6] 发送引擎：`backend/src/saler/core/sending/engine.py`（按通道配额与节奏节流；渲染并冻结 content_version；经 MailSender/SMSSender 发送；写台账；失败重试；primary→backup 换通道；暂停/恢复；FR-048/049）
-- [ ] T121 [US6] 多轮跟进调度：`backend/src/saler/core/campaigns/followup.py`（间隔触发、no_reply_or_progress 条件、轮次内容选择）
+- [x] T117 [US6] 人群解析：`backend/src/saler/core/campaigns/audience.py`（筛选条件→send_record(pending) 物化；排除 suppression/exclusion/已有触达；FR-046/050）
+- [x] T118 [US6] 预估服务：`backend/src/saler/core/campaigns/estimate.py`（客户数/条数/语言通道分布/时长；FR-047）
+- [x] T119 [US6] 计划与轮次服务：`backend/src/saler/core/campaigns/service.py`（状态机 draft→running⇄paused→completed/cancelled；轮次配置；仅可选已发布内容；FR-046/052/053）
+- [x] T120 [US6] 发送引擎：`backend/src/saler/core/sending/engine.py`（按通道配额与节奏节流；渲染并冻结 content_version；经 MailSender/SMSSender 发送；写台账；失败重试；primary→backup 换通道；暂停/恢复；FR-048/049）
+- [x] T121 [US6] 多轮跟进调度：`backend/src/saler/core/campaigns/followup.py`（间隔触发、no_reply_or_progress 条件、轮次内容选择）
 - [x] T122 [US6] 退订/黑名单：`backend/src/saler/core/compliance/suppression.py` + `backend/src/saler/api/routes/suppressions.py`（CRUD；命中对象所有后续计划自动排除；FR-051）
-- [ ] T123 [US6] 客户状态联动：`backend/src/saler/core/leads/company_service.py` 增补（已回复/已成交/拒绝 → 跟进与排除逻辑即时生效；FR-054）
-- [ ] T124 [US6] API：`backend/src/saler/api/routes/campaigns.py`（CRUD/estimate/rounds/start|pause|resume|cancel/records/retry/report/test-send）
-- [ ] T125 [US6] 报表与导出：`backend/src/saler/services/campaign_report.py`（按通道/语言/轮次统计；导出）
-- [ ] T126 [P] [US6] 前端：计划创建向导（人群→内容→通道→数量节奏 + 预估确认）`frontend/src/views/campaigns/CampaignWizard.vue`
-- [ ] T127 [P] [US6] 前端：执行监控（SSE 进度、暂停/恢复/中止、失败原因）`frontend/src/views/campaigns/CampaignMonitor.vue`
-- [ ] T128 [US6] 前端：台账查询与失败重试 `frontend/src/views/campaigns/RecordTable.vue`
-- [ ] T129 [US6] 前端：报表与导出 `frontend/src/views/campaigns/Report.vue`
-- [ ] T130 [US6] 前端：退订/黑名单管理页 `frontend/src/views/settings/Suppressions.vue`
+- [x] T123 [US6] 客户状态联动：`backend/src/saler/core/leads/company_service.py` 增补（已回复/已成交/拒绝 → 跟进与排除逻辑即时生效；FR-054）
+- [x] T124 [US6] API：`backend/src/saler/api/routes/campaigns.py`（CRUD/estimate/rounds/start|pause|resume|cancel/records/retry/report/test-send）
+- [x] T125 [US6] 报表与导出：`backend/src/saler/services/campaign_report.py`（按通道/语言/轮次统计；导出）
+- [x] T126 [P] [US6] 前端：计划创建向导（人群→内容→通道→数量节奏 + 预估确认）`frontend/src/views/campaigns/CampaignWizard.vue`
+- [x] T127 [P] [US6] 前端：执行监控（SSE 进度、暂停/恢复/中止、失败原因）`frontend/src/views/campaigns/CampaignMonitor.vue`
+- [x] T128 [US6] 前端：台账查询与失败重试 `frontend/src/views/campaigns/RecordTable.vue`
+- [x] T129 [US6] 前端：报表与导出 `frontend/src/views/campaigns/Report.vue`
+- [x] T130 [US6] 前端：退订/黑名单管理页 `frontend/src/views/settings/Suppressions.vue`
 - [ ] T131 [US6] 对照 quickstart S10 手工验证，并在 `specs/001-sales-tool/quickstart.md` 勾注结论
 
 **Checkpoint**: 全部用户故事就绪——从种子到批量触达的完整闭环
@@ -300,13 +300,13 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 **C1（FR-013 检索扩充图谱）——归 US1，建议在 T041 之后执行**
 
-- [ ] T147 [P] [US1] 单元测试：检索扩充图谱服务（从检索结果/目录提炼候选实体与种子→`source=search`→`review_status=pending`；`seed.query` 去重；evidence 来源记录）`backend/tests/unit/test_seed_discover.py`
-- [ ] T148 [US1] 检索扩充服务：`backend/src/saler/core/seeds/discover.py`（复用 T015 检索接口与 T036 落库/审核管线；真实渠道故障转移随 T056 接入，测试用假 SearchProvider）+ API 增补 `/seeds/discover`（job 化）于 `backend/src/saler/api/routes/seeds.py`（FR-013）
-- [ ] T149 [US1] 前端：检索扩充入口（选择检索渠道→输入关键词/目录→提炼结果→进入待审核）`frontend/src/views/seeds/ImportExport.vue`
+- [x] T147 [P] [US1] 单元测试：检索扩充图谱服务（从检索结果/目录提炼候选实体与种子→`source=search`→`review_status=pending`；`seed.query` 去重；evidence 来源记录）`backend/tests/unit/test_seed_discover.py`
+- [x] T148 [US1] 检索扩充服务：`backend/src/saler/core/seeds/discover.py`（复用 T015 检索接口与 T036 落库/审核管线；真实渠道故障转移随 T056 接入，测试用假 SearchProvider）+ API 增补 `/seeds/discover`（job 化）于 `backend/src/saler/api/routes/seeds.py`（FR-013）
+- [x] T149 [US1] 前端：检索扩充入口（选择检索渠道→输入关键词/目录→提炼结果→进入待审核）`frontend/src/views/seeds/ImportExport.vue`
 
 **C2（SC-011 首用引导）——归 US6，建议随 T126 一并执行**
 
-- [ ] T150 [US6] 前端：首用引导与上下文提示（计划向导内联说明、字段帮助、首次流程检查清单；确保"无需外部文档"路径可用）`frontend/src/views/campaigns/CampaignWizard.vue`、`frontend/src/components/common/OnboardingHint.vue`
+- [x] T150 [US6] 前端：首用引导与上下文提示（计划向导内联说明、字段帮助、首次流程检查清单；确保"无需外部文档"路径可用）`frontend/src/views/campaigns/CampaignWizard.vue`、`frontend/src/components/common/OnboardingHint.vue`
 
 ---
 
