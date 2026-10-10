@@ -29,6 +29,7 @@
         </el-menu-item>
         <el-sub-menu index="settings">
           <template #title><el-icon><Setting /></el-icon><span>设置</span></template>
+          <el-menu-item index="/settings">通用设置</el-menu-item>
           <el-menu-item index="/settings/llm">大模型服务</el-menu-item>
         </el-sub-menu>
       </el-menu>
