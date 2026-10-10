@@ -27,9 +27,10 @@
         <el-menu-item index="/campaigns">
           <el-icon><Promotion /></el-icon><span>营销计划</span>
         </el-menu-item>
-        <el-menu-item index="/settings">
-          <el-icon><Setting /></el-icon><span>设置</span>
-        </el-menu-item>
+        <el-sub-menu index="settings">
+          <template #title><el-icon><Setting /></el-icon><span>设置</span></template>
+          <el-menu-item index="/settings/llm">大模型服务</el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
     <el-container>

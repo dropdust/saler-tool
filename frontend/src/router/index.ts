@@ -57,6 +57,12 @@ const router = createRouter({
         { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
         { path: 'settings', component: Placeholder, meta: { title: '设置（后续里程碑）' } },
+        {
+          path: 'settings/llm',
+          name: 'settings-llm',
+          component: () => import('../views/settings/LlmProviders.vue'),
+          meta: { title: '大模型服务' },
+        },
       ],
     },
   ],
