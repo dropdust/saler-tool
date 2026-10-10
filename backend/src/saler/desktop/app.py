@@ -69,8 +69,11 @@ def wait_health(port: int, timeout: float = 15.0) -> None:
 
 
 def _build_app(data_dir: Path):
+    from sqlalchemy.orm import sessionmaker
+
     from saler.api.main import create_app
     from saler.db.session import make_engine
+    from saler.jobs.maintenance import run_maintenance
     from saler.security.crypto import resolve_secret_box
     from saler.security.token import AppToken
     from saler.services.datadir import check_writable, db_path, ensure_layout
@@ -84,13 +87,25 @@ def _build_app(data_dir: Path):
     db_url = f"sqlite:///{db_path(data_dir)}"
     run_migrations(db_url)
     engine = make_engine(db_path(data_dir))
+    try:  # 启动维护（T136）：日志滚动清理 + 备份提醒；失败不阻断启动
+        with sessionmaker(bind=engine)() as db:
+            run_maintenance(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("启动维护任务失败（忽略，不影响使用）")
     token = AppToken()
     return create_app(engine=engine, token=token.value), token.value
 
 
 def main() -> int:
+    from saler.desktop.diagnostics import check_desktop_environment, friendly_startup_error
     from saler.logging_config import setup_logging
     from saler.services.datadir import resolve_data_dir
+    from saler.services.proxy import apply_loopback_bypass
+
+    apply_loopback_bypass()  # T135：回环流量绕过系统代理
+    diagnosis = check_desktop_environment()
+    if not diagnosis.ok:
+        logger.warning(f"桌面环境自检未通过：{diagnosis.detail}。{diagnosis.hint}")
 
     data_dir = resolve_data_dir()
     try:
@@ -120,6 +135,10 @@ def main() -> int:
     webview.create_window(WINDOW_TITLE, url, width=1360, height=900, min_size=(1024, 700))
     try:
         webview.start()
+    except Exception as exc:  # noqa: BLE001 —— WebView 运行时缺失等给出可操作提示（T134）
+        logger.exception("桌面窗口启动失败")
+        _report_fatal(friendly_startup_error(exc))
+        return 4
     finally:
         server.stop()
     return 0
