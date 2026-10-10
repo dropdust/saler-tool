@@ -122,7 +122,7 @@ class CrawlEngine:
             )
             seed_pairs = [(seed.id, seed.query) for seed in query.order_by(Seed.id.asc()).all()]
 
-        for index, (seed_id, query_text) in enumerate(seed_pairs, start=1):
+        for seed_id, query_text in seed_pairs:
             await ctx.checkpoint()
             with self._sf() as db:
                 seed = db.get(Seed, seed_id)
