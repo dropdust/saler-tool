@@ -118,6 +118,8 @@ class OpenAICompatibleProvider:
         self.supports_json_schema = supports_json_schema
         self.temperature = temperature
         self.provider_name = provider_name
+        #: 最近一次 generate_structured 的调用统计（供任务层遥测记录，T137）
+        self.last_stats: dict | None = None
         self._api_key = api_key
         self._client_factory = client_factory or self._default_client_factory
 
@@ -193,7 +195,10 @@ class OpenAICompatibleProvider:
             {"role": "user", "content": prompt},
         ]
         last_error: str = ""
+        self.last_stats = {"attempts": 0, "repair_attempts": 0, "ok": False, "error_kind": None}
         for _attempt in range(max_repair_attempts + 1):
+            self.last_stats["attempts"] = _attempt + 1
+            self.last_stats["repair_attempts"] = _attempt
             text = self._chat(
                 messages=messages, response_format=self._response_format(schema), timeout_s=timeout_s
             )
@@ -208,6 +213,7 @@ class OpenAICompatibleProvider:
                 continue
             try:
                 jsonschema.validate(data, schema)
+                self.last_stats["ok"] = True
                 return data
             except jsonschema.ValidationError as exc:
                 last_error = f"schema 校验失败：{exc.message}（路径：{list(exc.absolute_path)}）"
@@ -219,6 +225,7 @@ class OpenAICompatibleProvider:
                         "content": f"你上一次的 JSON 未通过校验：{last_error}。请返回修正后的严格 JSON。",
                     }
                 )
+        self.last_stats["error_kind"] = ErrorKind.INVALID_OUTPUT.value
         raise ProviderError(
             ErrorKind.INVALID_OUTPUT,
             f"模型输出在 {max_repair_attempts + 1} 次尝试后仍未通过 schema 校验",

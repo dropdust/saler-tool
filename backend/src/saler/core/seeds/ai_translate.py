@@ -16,6 +16,7 @@ from saler.core.graph import service as graph_service
 from saler.core.seeds import service as seed_service
 from saler.db.models import GraphNode, NodeTerm, Seed
 from saler.jobs.engine import JobContext
+from saler.providers.llm import telemetry
 from saler.services.operation_log import log_op
 
 
@@ -73,6 +74,7 @@ async def run_translate_seeds(
         )
         created = skipped = 0
         with session_factory() as db:
+            telemetry.record_from_provider(db, provider, operation="seed_translate")
             batch = f"llm-tr-{lang}-{batch_date}"
             for info, out in zip(seed_info, translated, strict=False):
                 seed_id, _src, _slang, product_line_id, persona_id, market_id, priority = info
@@ -141,6 +143,7 @@ async def run_translate_terms(
         )
         created = skipped = 0
         with session_factory() as db:
+            telemetry.record_from_provider(db, provider, operation="term_translate")
             for (node_id, _name), out in zip(node_info, translated, strict=False):
                 text = (out or "").strip()
                 if not text:

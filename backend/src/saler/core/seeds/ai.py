@@ -15,6 +15,7 @@ from saler.core.graph import service as graph_service
 from saler.core.seeds import service as seed_service
 from saler.db.models import GraphNode, Seed
 from saler.jobs.engine import JobContext
+from saler.providers.llm import telemetry
 from saler.providers.llm.schemas import SEED_EXPANSION_V1_SCHEMA
 from saler.services.operation_log import log_op
 
@@ -105,6 +106,7 @@ async def run_expansion(
     }
     batch = f"llm-{datetime.now(UTC).strftime('%Y%m%d')}"
     with session_factory() as db:
+        telemetry.record_from_provider(db, provider, operation="seed_expand")
         existing: dict[tuple[str, str], int] = {
             (node.node_type, node.name): node.id for node in db.query(GraphNode).all()
         }

@@ -14,6 +14,7 @@ from saler.core.content import service as content_service
 from saler.core.errors import ValidationFailed
 from saler.db.models import ContentVariant, GraphNode, NodeTerm
 from saler.jobs.engine import JobContext
+from saler.providers.llm import telemetry
 from saler.providers.llm.schemas import CONTENT_DRAFT_V1_SCHEMA, CONTENT_TRANSLATION_V1_SCHEMA
 from saler.services.operation_log import log_op
 
@@ -98,6 +99,7 @@ async def run_content_draft(
     )
     await ctx.checkpoint()
     with session_factory() as db:
+        telemetry.record_from_provider(db, provider, operation="content_draft")
         theme = content_service.get_theme(db, theme_id)
         master = _master_variant(db, theme_id, theme.master_lang)
         if master is None:
@@ -174,6 +176,7 @@ async def run_content_translate(
             provider.generate_structured, prompt=prompt, schema=CONTENT_TRANSLATION_V1_SCHEMA
         )
         with session_factory() as db:
+            telemetry.record_from_provider(db, provider, operation="content_translate")
             existing = (
                 db.query(ContentVariant)
                 .filter_by(theme_id=theme_id, lang=lang)
