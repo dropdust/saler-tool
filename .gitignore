@@ -1,0 +1,51 @@
+# ===== 数据资产与密钥（宪法第 V 条：密钥零入库）=====
+*.db
+*.db-wal
+*.db-shm
+secrets/
+backups/
+exports/
+.env
+.env.*
+*.pem
+*.key
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ===== Node / 前端 =====
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.local
+
+# ===== 打包产物 =====
+packaging/build/
+*.AppImage
+*.dmg
+*.exe
+
+# ===== 系统 / 编辑器 =====
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# ===== 日志 =====
+*.log
+logs/
+
+# ===== 本机配置 =====
+.claude/settings.local.json
