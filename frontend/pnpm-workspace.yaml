@@ -1,0 +1,4 @@
+# pnpm 11：显式放行必要构建脚本（esbuild 二进制校验、vue-demi 补丁）
+allowBuilds:
+  esbuild: true
+  vue-demi: true
