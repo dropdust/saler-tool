@@ -369,3 +369,45 @@ class TestCompanyStatusLinkage:
         assert rows[0].skip_reason == "company_replied"
         # 其他客户不受影响
         assert db.query(SendRecord).filter_by(status="pending").count() == 1
+
+
+class TestNetworkCircuitBreaker:
+    @pytest.mark.asyncio
+    async def test_consecutive_network_failures_stop_the_round(self, db, fake_mail, session_factory):
+        """Edge Case：网络/代理中断 → 连续 5 条失败即停止，剩余保留 pending（断点续发）。"""
+        from saler.core.sending.engine import NETWORK_BREAKER_THRESHOLD
+
+        channel = make_channel(db, "断网通道")
+        for index in range(NETWORK_BREAKER_THRESHOLD + 2):
+            make_company(db, f"N{index}", email=f"n{index}@x.com")
+        theme = make_theme(db)
+        campaign = make_campaign(db, theme, [channel])
+        from saler.core.campaigns import service as campaign_service
+
+        campaign_service.start_round(db, campaign, round_no=1)
+
+        class OfflineSender(FakeMailSender):
+            def send(self, *, message, timeout_s: float = 60):
+                raise ProviderError(ErrorKind.NETWORK, "网络不可达")
+
+        registry.register(
+            ProviderManifest(
+                kind="mail", type_key="fake_mail_offline", display_name="断网假邮箱",
+                factory=lambda **kwargs: OfflineSender(),
+            )
+        )
+        channel.config = {"provider": "fake_mail_offline"}
+        db.commit()
+
+        result, ctx = await run_round(session_factory, campaign.id)
+        db.expire_all()
+        assert result["stopped"] == "network"
+        assert result["failed"] == NETWORK_BREAKER_THRESHOLD
+        assert db.query(SendRecord).filter_by(status="pending").count() == 2
+        assert any("网络" in message for message in ctx.logs)
+
+        # 网络恢复：重新启动（同轮重跑 pending）→ 剩余全部成功
+        channel.config = {"provider": "fake_mail_guard"}
+        db.commit()
+        result2, _ctx2 = await run_round(session_factory, campaign.id)
+        assert result2["sent"] == 2

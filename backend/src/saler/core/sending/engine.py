@@ -31,9 +31,13 @@ from saler.services.operation_log import log_op
 
 MAX_ATTEMPTS_PER_CHANNEL = 3
 RETRY_BASE_DELAY_S = 0.5
+#: 连续 N 条网络类失败 → 判定网络/代理中断，停止本轮（记录保持 pending，恢复后断点续发；Edge Case）
+NETWORK_BREAKER_THRESHOLD = 5
 _TERMINAL_NO_RETRY = {ErrorKind.RECIPIENT_REJECTED}
 # 值得在原通道重试的瞬时错误
 _TRANSIENT = {ErrorKind.RATE_LIMIT, ErrorKind.TIMEOUT, ErrorKind.NETWORK, ErrorKind.SERVER}
+# 网络类错误（触发熔断计数；成功/其他结果重置计数）
+_NETWORK_KINDS = {ErrorKind.NETWORK, ErrorKind.TIMEOUT}
 
 
 def _channel_chain(db: Session, campaign_id: int) -> list[Channel]:
@@ -175,6 +179,7 @@ async def run_campaign_round(
     stats = {"sent": 0, "failed": 0, "bounced": 0, "skipped": 0, "suppressed": 0}
     stopped: str | None = None
     last_sent_monotonic: dict[int, float] = {}
+    consecutive_network_failures = 0
 
     for record_id in record_ids:
         await ctx.checkpoint()
@@ -264,6 +269,7 @@ async def run_campaign_round(
                     company.status = "contacted"  # 触达联动（FR-054）
                 db.commit()
                 stats["sent"] += 1
+                consecutive_network_failures = 0
                 log_op(
                     db, "send", f"发送成功：{company.name or company.id} → {record.contact_value}",
                     ref_type="campaign", ref_id=campaign_id,
@@ -280,9 +286,22 @@ async def run_campaign_round(
                 db.commit()
                 if record.status == "bounced":
                     stats["bounced"] += 1
+                    consecutive_network_failures = 0
                 else:
                     stats["failed"] += 1
+                    if err.kind in _NETWORK_KINDS:
+                        consecutive_network_failures += 1
+                    else:
+                        consecutive_network_failures = 0
                 logger.info("发送失败 campaign={} record={} kind={}", campaign_id, record.id, err.kind)
+                if consecutive_network_failures >= NETWORK_BREAKER_THRESHOLD:
+                    stopped = "network"  # Edge Case：网络/代理中断 → 停止并提示（记录保留 pending）
+                    ctx.log(
+                        f"连续 {consecutive_network_failures} 条网络失败：判定网络或代理中断，"
+                        "已停止本轮（剩余记录保留待发，网络恢复后重新启动即可续发）",
+                        level="warn",
+                    )
+                    break
 
         done = stats["sent"] + stats["failed"] + stats["bounced"] + stats["skipped"] + stats["suppressed"]
         ctx.progress(
@@ -302,7 +321,11 @@ async def run_campaign_round(
         result = {**final, "total": total, "round": round_no}
         if stopped:
             result["stopped"] = stopped
-            result["hint"] = "剩余记录保持待发：调整限额后重新启动即可断点续发"
+            result["hint"] = (
+                "网络/代理恢复后重新启动即可断点续发（本轮已失败条目可在台账中重试）"
+                if stopped == "network"
+                else "剩余记录保持待发：调整限额后重新启动即可断点续发"
+            )
         ctx.log(
             f"本轮结束：成功 {final['sent']}，失败 {final['failed']}，退信 {final['bounced']}，"
             f"跳过 {final['skipped']}，排除 {final['suppressed']}"
