@@ -54,5 +54,9 @@ export default {
     completed: '已完成',
     failed: '已失败',
     cancelled: '已取消',
+    draft: '草稿',
+    review: '待审核',
+    published: '已发布',
+    archived: '已归档',
   },
 }

@@ -88,7 +88,24 @@ const router = createRouter({
           component: () => import('../views/leads/ExclusionRules.vue'),
           meta: { title: '排除规则' },
         },
-        { path: 'content', component: Placeholder, meta: { title: '营销内容（后续里程碑）' } },
+        {
+          path: 'content',
+          name: 'content',
+          component: () => import('../views/content/ThemeList.vue'),
+          meta: { title: '营销内容' },
+        },
+        {
+          path: 'content/variants/:id',
+          name: 'content-variant',
+          component: () => import('../views/content/VariantEditor.vue'),
+          meta: { title: '内容编辑' },
+        },
+        {
+          path: 'content/variants/:id/versions',
+          name: 'content-variant-versions',
+          component: () => import('../views/content/VersionHistory.vue'),
+          meta: { title: '版本历史' },
+        },
         { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
         {

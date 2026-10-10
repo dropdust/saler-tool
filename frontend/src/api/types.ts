@@ -196,3 +196,47 @@ export interface ExclusionRuleRow {
   note: string | null
   created_at: string | null
 }
+
+export interface ContentVersionRow {
+  id: number
+  variant_id: number
+  version_no: number
+  subject: string | null
+  body_md: string
+  variables: string[]
+  change_note: string | null
+  created_by: string
+  created_at: string | null
+}
+
+export interface ContentVariantRow {
+  id: number
+  theme_id: number
+  lang: string
+  status: 'draft' | 'review' | 'published' | 'archived'
+  source: 'manual' | 'llm_assisted' | 'llm_translated'
+  parent_variant_id: number | null
+  current: ContentVersionRow | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ContentThemeRow {
+  id: number
+  name: string
+  content_type: 'email' | 'sms' | 'social_message'
+  master_lang: string
+  description: string | null
+  variants_count: number
+  variants?: ContentVariantRow[]
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface PublishedVariantRow {
+  id: number
+  theme_id: number
+  theme_name: string
+  lang: string
+  subject: string | null
+}
