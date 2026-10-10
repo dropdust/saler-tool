@@ -303,3 +303,63 @@ def channel_to_dict(row) -> dict[str, Any]:
         "created_at": iso(row.created_at),
         "updated_at": iso(row.updated_at),
     }
+
+
+def campaign_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "status": row.status,
+        "content_theme_id": row.content_theme_id,
+        "audience": row.audience or {},
+        "lang_strategy": row.lang_strategy,
+        "fixed_lang": row.fixed_lang,
+        "fallback_lang": row.fallback_lang,
+        "schedule": row.schedule or {},
+        "estimate": row.estimate or {},
+        "stats": row.stats or {},
+        "started_at": iso(row.started_at),
+        "finished_at": iso(row.finished_at),
+        "created_at": iso(row.created_at),
+        "updated_at": iso(row.updated_at),
+    }
+
+
+def campaign_round_to_dict(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "campaign_id": row.campaign_id,
+        "round_no": row.round_no,
+        "content_theme_id": row.content_theme_id,
+        "interval_days": row.interval_days,
+        "condition": row.condition,
+        "status": row.status,
+        "stats": row.stats or {},
+        "started_at": iso(row.started_at),
+        "finished_at": iso(row.finished_at),
+    }
+
+
+def send_record_to_dict(row, *, company_name: str | None = None, channel_name: str | None = None) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "campaign_id": row.campaign_id,
+        "round_no": row.round_no,
+        "company_id": row.company_id,
+        "company_name": company_name,
+        "contact_id": row.contact_id,
+        "contact_value": row.contact_value,
+        "channel_id": row.channel_id,
+        "channel_name": channel_name,
+        "content_variant_id": row.content_variant_id,
+        "content_version_id": row.content_version_id,
+        "lang_used": row.lang_used,
+        "fallback_used": row.fallback_used,
+        "status": row.status,
+        "skip_reason": row.skip_reason,
+        "error_code": row.error_code,
+        "error_message": row.error_message,
+        "scheduled_at": iso(row.scheduled_at),
+        "sent_at": iso(row.sent_at),
+        "created_at": iso(row.created_at),
+    }
