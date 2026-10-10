@@ -276,20 +276,20 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 **Purpose**: 横切质量、性能、打包与发布（依赖全部目标故事完成）
 
-- [ ] T132 [P] 性能：FTS5 影子表（company/contact 搜索；仅在索引不足时启用）`backend/src/saler/db/fts.py`
-- [ ] T133 [P] 大列表虚拟滚动组件（10 万级线索列表）`frontend/src/components/tables/VirtualTable.vue`
-- [ ] T134 Linux WebKitGTK 启动诊断与可操作错误提示 `backend/src/saler/desktop/diagnostics.py`
-- [ ] T135 代理兼容：回环地址绕过系统代理（`no_proxy`）`backend/src/saler/services/proxy.py`
-- [ ] T136 维护任务：operation_log 滚动清理 + 备份提醒 `backend/src/saler/jobs/maintenance.py`
-- [ ] T137 AI 遥测：各 provider/model 重试率记录入 operation_log `backend/src/saler/providers/llm/telemetry.py`
-- [ ] T138 PyInstaller spec 完稿（`--onedir`、hiddenimports（uvicorn/fastapi/gi）、`--add-data` 前端产物、`multiprocessing.freeze_support()`）`packaging/saler.spec`
-- [ ] T139 三平台构建矩阵完善（前端构建→PyInstaller→产物上传）`.github/workflows/build.yml`
-- [ ] T140 安装器脚本：`packaging/installers/windows/inno.iss`、`packaging/installers/linux/appimage.yml`、`packaging/installers/macos/dmg-notes.md`
-- [ ] T141 签名与公证（发布阶段）：`packaging/installers/macos/notarize.sh`（inside-out 签名、G2 中间证书、`status: Accepted` 解析）、`packaging/installers/windows/sign.md`（Azure Trusted Signing）
+- [x] T132 [P] 性能：FTS5 影子表（company/contact 搜索；仅在索引不足时启用）`backend/src/saler/db/fts.py`
+- [x] T133 [P] 大列表虚拟滚动组件（10 万级线索列表）`frontend/src/components/tables/VirtualTable.vue`
+- [x] T134 Linux WebKitGTK 启动诊断与可操作错误提示 `backend/src/saler/desktop/diagnostics.py`
+- [x] T135 代理兼容：回环地址绕过系统代理（`no_proxy`）`backend/src/saler/services/proxy.py`
+- [x] T136 维护任务：operation_log 滚动清理 + 备份提醒 `backend/src/saler/jobs/maintenance.py`
+- [x] T137 AI 遥测：各 provider/model 重试率记录入 operation_log `backend/src/saler/providers/llm/telemetry.py`
+- [x] T138 PyInstaller spec 完稿（`--onedir`、hiddenimports（uvicorn/fastapi/gi）、`--add-data` 前端产物、`multiprocessing.freeze_support()`）`packaging/saler.spec`
+- [x] T139 三平台构建矩阵完善（前端构建→PyInstaller→产物上传）`.github/workflows/build.yml`
+- [x] T140 安装器脚本：`packaging/installers/windows/inno.iss`、`packaging/installers/linux/appimage.yml`、`packaging/installers/macos/dmg-notes.md`
+- [x] T141 签名与公证（发布阶段）：`packaging/installers/macos/notarize.sh`（inside-out 签名、G2 中间证书、`status: Accepted` 解析）、`packaging/installers/windows/sign.md`（Azure Trusted Signing）
 - [ ] T142 冻结包冒烟：三平台安装产物跑 quickstart S1/S6/S10 并记录
 - [ ] T143 quickstart 全场景 S1–S12 走查记录（含 S12 无大模型兜底与三平台一致性）
-- [ ] T144 用户文档初稿：`docs/user-guide.md`（安装、首次配置、密钥与合规说明、常见问题）
-- [ ] T145 刷新 `specs/001-sales-tool/plan.md` 的 Constitution Check 为对 v1.0.0 的对照结论
+- [x] T144 用户文档初稿：`docs/user-guide.md`（安装、首次配置、密钥与合规说明、常见问题）
+- [x] T145 刷新 `specs/001-sales-tool/plan.md` 的 Constitution Check 为对 v1.0.0 的对照结论
 - [ ] T146 运行 `/speckit-analyze` 做跨工件一致性检查并处置发现项
 
 ---
