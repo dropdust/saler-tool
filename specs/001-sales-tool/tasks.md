@@ -220,18 +220,18 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 ### Tests for User Story 5 ⚠️（先写，确认失败）
 
-- [ ] T104 [P] [US5] 契约测试：通道 CRUD（secret 不读回）、健康、限额结构 `backend/tests/contract/test_channels_api.py`
-- [ ] T105 [P] [US5] 单元测试：SMTP 适配器（本地假 SMTP/respx；auth/recipient_rejected 等错误映射）`backend/tests/unit/test_mail_adapter.py`
-- [ ] T106 [P] [US5] 集成测试：S9 配置→测试发送（假 MailSender）`backend/tests/integration/test_us5_channel_flow.py`
+- [x] T104 [P] [US5] 契约测试：通道 CRUD（secret 不读回）、健康、限额结构 `backend/tests/contract/test_channels_api.py`
+- [x] T105 [P] [US5] 单元测试：SMTP 适配器（本地假 SMTP/respx；auth/recipient_rejected 等错误映射）`backend/tests/unit/test_mail_adapter.py`
+- [x] T106 [P] [US5] 集成测试：S9 配置→测试发送（假 MailSender）`backend/tests/integration/test_us5_channel_flow.py`
 
 ### Implementation for User Story 5
 
-- [ ] T107 [US5] 邮件适配器：`backend/src/saler/providers/mail/smtp.py`（aiosmtplib；verify/send/send_limit_hint；错误映射按 contracts/provider-adapters.md §3）
-- [ ] T108 [US5] 短信适配器：`backend/src/saler/providers/sms/http_generic.py`（HTTP API + 用户凭证；附 1–2 家服务商配置模板）
-- [ ] T109 [US5] 通道服务：`backend/src/saler/core/sending/channel_service.py`（CRUD、identity、daily_limit/rate/concurrency、used_today 跨日重置、health；FR-042/044）
-- [ ] T110 [US5] API：`backend/src/saler/api/routes/channels.py`（CRUD/test/usage；FR-040/041）
-- [ ] T111 [US5] 内容测试发送（US4×US5）：`backend/src/saler/api/routes/content.py` 增补 `test-send`（FR-039）
-- [ ] T112 [P] [US5] 前端：通道管理页（动态表单、脱敏展示、测试按钮、健康与用量）`frontend/src/views/channels/ChannelList.vue`、`ChannelForm.vue`
+- [x] T107 [US5] 邮件适配器：`backend/src/saler/providers/mail/smtp.py`（aiosmtplib；verify/send/send_limit_hint；错误映射按 contracts/provider-adapters.md §3）
+- [x] T108 [US5] 短信适配器：`backend/src/saler/providers/sms/http_generic.py`（HTTP API + 用户凭证；附 1–2 家服务商配置模板）
+- [x] T109 [US5] 通道服务：`backend/src/saler/core/sending/channel_service.py`（CRUD、identity、daily_limit/rate/concurrency、used_today 跨日重置、health；FR-042/044）
+- [x] T110 [US5] API：`backend/src/saler/api/routes/channels.py`（CRUD/test/usage；FR-040/041）
+- [x] T111 [US5] 内容测试发送（US4×US5）：`backend/src/saler/api/routes/content.py` 增补 `test-send`（FR-039）
+- [x] T112 [P] [US5] 前端：通道管理页（动态表单、脱敏展示、测试按钮、健康与用量）`frontend/src/views/channels/ChannelList.vue`、`ChannelForm.vue`
 - [ ] T113 [US5] 对照 quickstart S9 手工验证，并在 `specs/001-sales-tool/quickstart.md` 勾注结论
 
 **Checkpoint**: US5 可独立演示——邮件/短信通道可配置可验证
