@@ -97,6 +97,12 @@ const router = createRouter({
           component: () => import('../views/settings/Backup.vue'),
           meta: { title: '备份与数据' },
         },
+        {
+          path: 'settings/search',
+          name: 'settings-search',
+          component: () => import('../views/settings/SearchProviders.vue'),
+          meta: { title: '检索渠道' },
+        },
       ],
     },
   ],

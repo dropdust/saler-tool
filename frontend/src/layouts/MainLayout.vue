@@ -34,6 +34,7 @@
           <template #title><el-icon><Setting /></el-icon><span>设置</span></template>
           <el-menu-item index="/settings">通用设置</el-menu-item>
           <el-menu-item index="/settings/llm">大模型服务</el-menu-item>
+          <el-menu-item index="/settings/search">检索渠道</el-menu-item>
           <el-menu-item index="/settings/backup">备份与数据</el-menu-item>
         </el-sub-menu>
       </el-menu>
