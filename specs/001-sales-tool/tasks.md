@@ -116,31 +116,31 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 ### Tests for User Story 2 ⚠️（先写，确认失败）
 
-- [ ] T048 [P] [US2] 单元测试：联系方式抽取（图片邮箱/JS 拼接/防爬噪点/多 @/空格变体，HTML fixtures）`backend/tests/unit/test_extractor.py` + `backend/tests/fixtures/html/`
-- [ ] T049 [P] [US2] 契约测试：检索适配器（respx；限流→切渠道；DDG 202 软封禁识别为失败）`backend/tests/contract/test_search_providers.py`
-- [ ] T050 [P] [US2] 单元测试：挖掘引擎（断点续跑、同目标不重抓、暂停/恢复、失败重试）`backend/tests/unit/test_crawl_engine.py`
-- [ ] T051 [P] [US2] 集成测试：S6/S7（挖掘→去重→排除→人工修订→导出）`backend/tests/integration/test_us2_crawl_flow.py`
+- [x] T048 [P] [US2] 单元测试：联系方式抽取（图片邮箱/JS 拼接/防爬噪点/多 @/空格变体，HTML fixtures）`backend/tests/unit/test_extractor.py` + `backend/tests/fixtures/html/`
+- [x] T049 [P] [US2] 契约测试：检索适配器（respx；限流→切渠道；DDG 202 软封禁识别为失败）`backend/tests/contract/test_search_providers.py`
+- [x] T050 [P] [US2] 单元测试：挖掘引擎（断点续跑、同目标不重抓、暂停/恢复、失败重试）`backend/tests/unit/test_crawl_engine.py`
+- [x] T051 [P] [US2] 集成测试：S6/S7（挖掘→去重→排除→人工修订→导出）`backend/tests/integration/test_us2_crawl_flow.py`
 
 ### Implementation for User Story 2
 
-- [ ] T052 [P] [US2] 检索适配器：Brave `backend/src/saler/providers/search/brave.py`
-- [ ] T053 [P] [US2] 检索适配器：Serper `backend/src/saler/providers/search/serper.py`
-- [ ] T054 [P] [US2] 检索适配器：Tavily `backend/src/saler/providers/search/tavily.py`
-- [ ] T055 [P] [US2] 检索适配器：DuckDuckGo 兜底（403/429/202 一律视为失败）`backend/src/saler/providers/search/ddg_fallback.py`
-- [ ] T056 [US2] 检索故障转移与注册：`backend/src/saler/providers/search/failover.py`（按 priority 调用、指数退避、quota/blocked 切渠道；用量计入 `search_provider.used_today`）
-- [ ] T057 [US2] 抓取层：`backend/src/saler/core/leads/fetcher.py`（httpx 异步、代理、单站 ≥1s 间隔、并发上限、robots 策略开关、重试、页大小上限；FR-025）
-- [ ] T058 [US2] 页面解析与联系页发现：`backend/src/saler/core/leads/parser.py`（selectolax；contact/about 链接候选）
-- [ ] T059 [US2] 联系方式抽取：`backend/src/saler/core/leads/extractor.py`（邮箱/电话/WhatsApp/Facebook/LinkedIn/X/Instagram/WeChat；规范化、用途分类、疑似无效标注；FR-020/021）
-- [ ] T060 [US2] 国家语言富化：`backend/src/saler/core/leads/enrich.py`（来源优先级 ccTLD > 查询市场 > 地址/电话区号；html lang + 检测；记录 country_source/language_source）
-- [ ] T061 [US2] 公司/联系方式服务：`backend/src/saler/core/leads/company_service.py`（合并多域名公司、状态、标签、`UNIQUE(company_id,type,value_normalized)` 执行；FR-022/027）
-- [ ] T062 [US2] 排除规则服务与应用任务：`backend/src/saler/core/compliance/exclusion.py`（关键词/域名/名单；命中对象单独存放；FR-023）
-- [ ] T063 [US2] 挖掘引擎：`backend/src/saler/core/leads/crawl_engine.py`（种子→检索→域名（pending）→抓取→抽取→落库；进度统计与日志；暂停/恢复/重试状态机；FR-019/024/026）
-- [ ] T064 [US2] 客户导入：`backend/src/saler/services/import_customers.py`（列名映射、先 domain 后 email 匹配、黑名单检查、导入报告；contracts/data-exchange.md §4）
-- [ ] T065 [US2] 线索导出：`backend/src/saler/services/export_leads.py`（字段与契约 §3 一致；被排除 Sheet + 统计 Sheet）
-- [ ] T066 [US2] API：`backend/src/saler/api/routes/crawl.py`（任务创建/控制）、`backend/src/saler/api/routes/domains.py`（列表/修订）
-- [ ] T067 [US2] API：`backend/src/saler/api/routes/companies.py`（列表/修订/合并/contacts/import/export；FR-027~029）
-- [ ] T068 [US2] API：`backend/src/saler/api/routes/search_providers.py`（CRUD/测试；密钥只写不读回）
-- [ ] T069 [US2] API：`backend/src/saler/api/routes/exclusion_rules.py`（CRUD + 对存量重跑 apply）
+- [x] T052 [P] [US2] 检索适配器：Brave `backend/src/saler/providers/search/brave.py`
+- [x] T053 [P] [US2] 检索适配器：Serper `backend/src/saler/providers/search/serper.py`
+- [x] T054 [P] [US2] 检索适配器：Tavily `backend/src/saler/providers/search/tavily.py`
+- [x] T055 [P] [US2] 检索适配器：DuckDuckGo 兜底（403/429/202 一律视为失败）`backend/src/saler/providers/search/ddg_fallback.py`
+- [x] T056 [US2] 检索故障转移与注册：`backend/src/saler/providers/search/failover.py`（按 priority 调用、指数退避、quota/blocked 切渠道；用量计入 `search_provider.used_today`）
+- [x] T057 [US2] 抓取层：`backend/src/saler/core/leads/fetcher.py`（httpx 异步、代理、单站 ≥1s 间隔、并发上限、robots 策略开关、重试、页大小上限；FR-025）
+- [x] T058 [US2] 页面解析与联系页发现：`backend/src/saler/core/leads/parser.py`（selectolax；contact/about 链接候选）
+- [x] T059 [US2] 联系方式抽取：`backend/src/saler/core/leads/extractor.py`（邮箱/电话/WhatsApp/Facebook/LinkedIn/X/Instagram/WeChat；规范化、用途分类、疑似无效标注；FR-020/021）
+- [x] T060 [US2] 国家语言富化：`backend/src/saler/core/leads/enrich.py`（来源优先级 ccTLD > 查询市场 > 地址/电话区号；html lang + 检测；记录 country_source/language_source）
+- [x] T061 [US2] 公司/联系方式服务：`backend/src/saler/core/leads/company_service.py`（合并多域名公司、状态、标签、`UNIQUE(company_id,type,value_normalized)` 执行；FR-022/027）
+- [x] T062 [US2] 排除规则服务与应用任务：`backend/src/saler/core/compliance/exclusion.py`（关键词/域名/名单；命中对象单独存放；FR-023）
+- [x] T063 [US2] 挖掘引擎：`backend/src/saler/core/leads/crawl_engine.py`（种子→检索→域名（pending）→抓取→抽取→落库；进度统计与日志；暂停/恢复/重试状态机；FR-019/024/026）
+- [x] T064 [US2] 客户导入：`backend/src/saler/services/import_customers.py`（列名映射、先 domain 后 email 匹配、黑名单检查、导入报告；contracts/data-exchange.md §4）
+- [x] T065 [US2] 线索导出：`backend/src/saler/services/export_leads.py`（字段与契约 §3 一致；被排除 Sheet + 统计 Sheet）
+- [x] T066 [US2] API：`backend/src/saler/api/routes/crawl.py`（任务创建/控制）、`backend/src/saler/api/routes/domains.py`（列表/修订）
+- [x] T067 [US2] API：`backend/src/saler/api/routes/companies.py`（列表/修订/合并/contacts/import/export；FR-027~029）
+- [x] T068 [US2] API：`backend/src/saler/api/routes/search_providers.py`（CRUD/测试；密钥只写不读回）
+- [x] T069 [US2] API：`backend/src/saler/api/routes/exclusion_rules.py`（CRUD + 对存量重跑 apply）
 - [ ] T070 [P] [US2] 前端：挖掘任务页（创建向导、SSE 进度、日志、暂停恢复）`frontend/src/views/leads/CrawlJobs.vue`
 - [ ] T071 [P] [US2] 前端：候选域名列表（状态筛选、人工排除/恢复）`frontend/src/views/leads/DomainList.vue`
 - [ ] T072 [P] [US2] 前端：公司列表与详情（联系方式、纠错补录、合并、状态标记）`frontend/src/views/leads/CompanyList.vue`、`frontend/src/views/leads/CompanyDetail.vue`
@@ -257,7 +257,7 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 - [ ] T119 [US6] 计划与轮次服务：`backend/src/saler/core/campaigns/service.py`（状态机 draft→running⇄paused→completed/cancelled；轮次配置；仅可选已发布内容；FR-046/052/053）
 - [ ] T120 [US6] 发送引擎：`backend/src/saler/core/sending/engine.py`（按通道配额与节奏节流；渲染并冻结 content_version；经 MailSender/SMSSender 发送；写台账；失败重试；primary→backup 换通道；暂停/恢复；FR-048/049）
 - [ ] T121 [US6] 多轮跟进调度：`backend/src/saler/core/campaigns/followup.py`（间隔触发、no_reply_or_progress 条件、轮次内容选择）
-- [ ] T122 [US6] 退订/黑名单：`backend/src/saler/core/compliance/suppression.py` + `backend/src/saler/api/routes/suppressions.py`（CRUD；命中对象所有后续计划自动排除；FR-051）
+- [x] T122 [US6] 退订/黑名单：`backend/src/saler/core/compliance/suppression.py` + `backend/src/saler/api/routes/suppressions.py`（CRUD；命中对象所有后续计划自动排除；FR-051）
 - [ ] T123 [US6] 客户状态联动：`backend/src/saler/core/leads/company_service.py` 增补（已回复/已成交/拒绝 → 跟进与排除逻辑即时生效；FR-054）
 - [ ] T124 [US6] API：`backend/src/saler/api/routes/campaigns.py`（CRUD/estimate/rounds/start|pause|resume|cancel/records/retry/report/test-send）
 - [ ] T125 [US6] 报表与导出：`backend/src/saler/services/campaign_report.py`（按通道/语言/轮次统计；导出）
