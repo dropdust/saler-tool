@@ -68,6 +68,12 @@ const router = createRouter({
           component: () => import('../views/settings/LlmProviders.vue'),
           meta: { title: '大模型服务' },
         },
+        {
+          path: 'settings/backup',
+          name: 'settings-backup',
+          component: () => import('../views/settings/Backup.vue'),
+          meta: { title: '备份与数据' },
+        },
       ],
     },
   ],
