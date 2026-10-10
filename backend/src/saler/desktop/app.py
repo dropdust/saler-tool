@@ -102,16 +102,24 @@ def _build_app(data_dir: Path):
     return create_app(engine=engine, token=token.value, frontend_dist=dist), token.value
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
     from saler.desktop.diagnostics import check_desktop_environment, friendly_startup_error
     from saler.logging_config import setup_logging
     from saler.services.datadir import resolve_data_dir
     from saler.services.proxy import apply_loopback_bypass
 
+    parser = argparse.ArgumentParser(description="销售获客工具（本地桌面 / 服务）")
+    parser.add_argument("--server", action="store_true", help="仅启动本地 API（无窗口），打印访问地址")
+    parser.add_argument("--port", type=int, default=0, help="--server 模式端口（默认自动分配）")
+    args = parser.parse_args(argv)
+
     apply_loopback_bypass()  # T135：回环流量绕过系统代理
-    diagnosis = check_desktop_environment()
-    if not diagnosis.ok:
-        logger.warning(f"桌面环境自检未通过：{diagnosis.detail}。{diagnosis.hint}")
+    if not args.server:
+        diagnosis = check_desktop_environment()
+        if not diagnosis.ok:
+            logger.warning(f"桌面环境自检未通过：{diagnosis.detail}。{diagnosis.hint}")
 
     data_dir = resolve_data_dir()
     try:
@@ -121,6 +129,9 @@ def main() -> int:
         logger.exception("桌面应用启动失败")
         _report_fatal(f"启动失败：{exc}")
         return 2
+
+    if args.server:
+        return _run_server(app, token, data_dir=data_dir, port=args.port)
 
     server = ServerThread(app)
     server.start()
@@ -147,6 +158,27 @@ def main() -> int:
         return 4
     finally:
         server.stop()
+    return 0
+
+
+def _run_server(app, token: str, *, data_dir: Path, port: int) -> int:
+    """无窗服务模式（冒烟/无 GUI 环境）：阻塞运行本地 API，并把访问地址写入数据目录。"""
+    import socket
+
+    import uvicorn
+
+    if not port:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+    url = f"http://127.0.0.1:{port}/?token={token}"
+    try:
+        (Path(data_dir) / "server_url.txt").write_text(url + "\n", encoding="utf-8")
+    except OSError:
+        pass
+    print(f"\n销售获客工具已启动（服务模式，无窗口）：\n  {url}\n按 Ctrl+C 退出\n", flush=True)
+    logger.info(f"服务模式启动：{url}")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     return 0
 
 
