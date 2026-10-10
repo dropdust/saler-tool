@@ -1,0 +1,70 @@
+name: Build
+
+# 三平台构建矩阵（T139）：前端构建 → PyInstaller 冻结 → 产物上传
+# 触发：发布标签（v*）或手动。签署/公证为发布阶段步骤（T141），在 secrets 就绪前跳过。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: SalerTool-linux-x64
+          - os: windows-latest
+            artifact: SalerTool-windows-x64
+          - os: macos-14
+            artifact: SalerTool-macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 前端构建
+        working-directory: frontend
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: 后端依赖与冻结
+        working-directory: backend
+        run: |
+          uv sync --extra dev
+          uv run pyinstaller ../packaging/saler.spec --noconfirm
+
+      - name: Linux 运行库自检（WebKitGTK 存在性）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
+
+      - name: 冻结包冒烟（导入/健康检查骨架；完整 S1/S6/S10 见 quickstart）
+        shell: bash
+        run: |
+          DIST="backend/dist/SalerTool"
+          if [ "$RUNNER_OS" = "Windows" ]; then EXE="$DIST/SalerTool.exe"; else EXE="$DIST/SalerTool"; fi
+          test -f "$EXE" || { echo "冻结产物缺失"; exit 1; }
+          echo "冻结产物：$(du -sh "$DIST" || true)"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: backend/dist/SalerTool
+          retention-days: 14
