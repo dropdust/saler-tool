@@ -290,7 +290,7 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 - [ ] T143 quickstart 全场景 S1–S12 走查记录（含 S12 无大模型兜底与三平台一致性）
 - [x] T144 用户文档初稿：`docs/user-guide.md`（安装、首次配置、密钥与合规说明、常见问题）
 - [x] T145 刷新 `specs/001-sales-tool/plan.md` 的 Constitution Check 为对 v1.0.0 的对照结论
-- [ ] T146 运行 `/speckit-analyze` 做跨工件一致性检查并处置发现项
+- [x] T146 运行 `/speckit-analyze` 做跨工件一致性检查并处置发现项
 
 ---
 
