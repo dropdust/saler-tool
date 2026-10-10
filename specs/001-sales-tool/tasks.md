@@ -160,23 +160,23 @@ description: "Task list for 通用销售获客工具（本地桌面版）"
 
 ### Tests for User Story 3 ⚠️（先写，确认失败）
 
-- [ ] T076 [P] [US3] 契约测试：LLM providers CRUD + 测试端点（响应永不含密钥明文）`backend/tests/contract/test_llm_providers_api.py`
-- [ ] T077 [P] [US3] 单元测试：备份归档生成/校验/损坏或版本不符的拒绝；staged restore 回滚 `backend/tests/unit/test_backup.py`
-- [ ] T078 [P] [US3] 集成测试：S11 备份→异机恢复一致性 + S2 配置流程 `backend/tests/integration/test_us3_backup_restore.py`
+- [x] T076 [P] [US3] 契约测试：LLM providers CRUD + 测试端点（响应永不含密钥明文）`backend/tests/contract/test_llm_providers_api.py`
+- [x] T077 [P] [US3] 单元测试：备份归档生成/校验/损坏或版本不符的拒绝；staged restore 回滚 `backend/tests/unit/test_backup.py`
+- [x] T078 [P] [US3] 集成测试：S11 备份→异机恢复一致性 + S2 配置流程 `backend/tests/integration/test_us3_backup_restore.py`
 
 ### Implementation for User Story 3
 
-- [ ] T079 [US3] LLM Provider 服务：`backend/src/saler/core/llm_provider_service.py`（CRUD、secret 只写、is_default、参数与模型字段；FR-030）
-- [ ] T080 [US3] 连通测试流程：`backend/src/saler/providers/llm/test_connection.py`（GET /models 优先、1-token ping 回退、原样展示服务商错误）
-- [ ] T081 [US3] API：`backend/src/saler/api/routes/llm.py`（providers CRUD + `/test`）
-- [ ] T082 [US3] 数据目录迁移：`backend/src/saler/services/datadir.py` 增补（校验→复制→核对→原子切换；FR-033）
-- [ ] T083 [US3] 备份/恢复服务：`backend/src/saler/services/backup.py`（zip + manifest + checksum；恢复先校验再原子替换，失败回滚；contracts/data-exchange.md §6）
-- [ ] T084 [US3] API：`backend/src/saler/api/routes/backup.py` 与 `backend/src/saler/api/routes/settings.py`（含 data-dir 校验/迁移）
-- [ ] T085 [US3] 全量数据导出（开放格式，未来 Web 迁移预留）：`backend/src/saler/services/export_all.py`（§6 末段）
-- [ ] T086 [P] [US3] 前端：大模型配置页（多服务、脱敏展示、测试按钮、默认标记）`frontend/src/views/settings/LlmProviders.vue`
-- [ ] T087 [P] [US3] 前端：通用设置页（数据目录、网络代理、界面语言、内容回退语言）`frontend/src/views/settings/General.vue`
-- [ ] T088 [P] [US3] 前端：备份管理页（创建/校验/恢复确认/历史）`frontend/src/views/settings/Backup.vue`
-- [ ] T089 [US3] 前端：离线降级门（未配置 LLM 时禁用 AI 入口并提示；FR-032）`frontend/src/composables/useAiGate.ts`
+- [x] T079 [US3] LLM Provider 服务：`backend/src/saler/core/llm_provider_service.py`（CRUD、secret 只写、is_default、参数与模型字段；FR-030）
+- [x] T080 [US3] 连通测试流程：`backend/src/saler/providers/llm/test_connection.py`（GET /models 优先、1-token ping 回退、原样展示服务商错误）
+- [x] T081 [US3] API：`backend/src/saler/api/routes/llm.py`（providers CRUD + `/test`）
+- [x] T082 [US3] 数据目录迁移：`backend/src/saler/services/datadir.py` 增补（校验→复制→核对→原子切换；FR-033）
+- [x] T083 [US3] 备份/恢复服务：`backend/src/saler/services/backup.py`（zip + manifest + checksum；恢复先校验再原子替换，失败回滚；contracts/data-exchange.md §6）
+- [x] T084 [US3] API：`backend/src/saler/api/routes/backup.py` 与 `backend/src/saler/api/routes/settings.py`（含 data-dir 校验/迁移）
+- [x] T085 [US3] 全量数据导出（开放格式，未来 Web 迁移预留）：`backend/src/saler/services/export_all.py`（§6 末段）
+- [x] T086 [P] [US3] 前端：大模型配置页（多服务、脱敏展示、测试按钮、默认标记）`frontend/src/views/settings/LlmProviders.vue`
+- [x] T087 [P] [US3] 前端：通用设置页（数据目录、网络代理、界面语言、内容回退语言）`frontend/src/views/settings/General.vue`
+- [x] T088 [P] [US3] 前端：备份管理页（创建/校验/恢复确认/历史）`frontend/src/views/settings/Backup.vue`
+- [x] T089 [US3] 前端：离线降级门（未配置 LLM 时禁用 AI 入口并提示；FR-032）`frontend/src/composables/useAiGate.ts`
 - [ ] T090 [US3] 对照 quickstart S1/S2/S11 手工验证，并在 `specs/001-sales-tool/quickstart.md` 勾注结论
 
 **Checkpoint**: US3 可独立演示——密钥管理、数据主权与迁移完整可用
