@@ -170,9 +170,17 @@ def list_companies(
 ) -> Query:
     query = db.query(Company)
     if q:
-        query = query.outerjoin(Domain, Domain.company_id == Company.id).filter(
-            or_(Company.name.contains(q), Domain.domain.contains(q))
-        ).distinct()
+        from saler.db import fts
+
+        engine = db.get_bind()
+        if fts.should_use_fts(db) and fts.ensure_shadow(engine):
+            # 大规模表：FTS5 影子表（词前缀匹配）；否则走 LIKE（小规模足够）
+            ids = fts.search_company_ids(engine, q)
+            query = query.filter(Company.id.in_(ids))
+        else:
+            query = query.outerjoin(Domain, Domain.company_id == Company.id).filter(
+                or_(Company.name.contains(q), Domain.domain.contains(q))
+            ).distinct()
     if country:
         query = query.filter(Company.country == country)
     if language:
