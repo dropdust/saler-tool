@@ -81,15 +81,121 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card shadow="never" class="discover">
+      <template #header>检索扩充图谱（从公开检索结果提炼候选实体与种子）</template>
+      <el-row :gutter="16">
+        <el-col :span="14">
+          <el-input
+            v-model="discoverForm.queriesText"
+            type="textarea"
+            :rows="5"
+            placeholder="每行一个检索关键词，如：&#10;power line hardware distributor Kenya&#10;switchgear supplier Tanzania"
+          />
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="tips"
+            title="这些关键词将经「检索渠道」查询公开网页；提炼出的候选实体/种子一律进入「待审核」，人工采纳后才会进入执行队列。"
+          />
+        </el-col>
+        <el-col :span="10">
+          <el-form label-width="110px" size="small">
+            <el-form-item label="参考市场节点">
+              <el-select v-model="discoverForm.market_id" clearable filterable placeholder="可选：关联到市场节点" style="width: 100%">
+                <el-option v-for="node in marketNodes" :key="node.id" :value="node.id" :label="node.name" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="每词结果数">
+              <el-input-number v-model="discoverForm.per_query" :min="3" :max="50" />
+            </el-form-item>
+            <el-form-item label="实体/种子上限">
+              <el-input-number v-model="discoverForm.max_orgs" :min="5" :max="100" />
+              <span class="hint"> / </span>
+              <el-input-number v-model="discoverForm.max_seeds" :min="5" :max="200" />
+            </el-form-item>
+          </el-form>
+          <el-button type="primary" :loading="discovering" @click="doDiscover">开始扩充</el-button>
+          <el-alert
+            v-if="discoverReport" type="success" :closable="false" class="tips"
+            :title="`新增实体 ${discoverReport.nodes_created} · 关系 ${discoverReport.edges_created} · 种子 ${discoverReport.seeds_created}（跳过重复 ${discoverReport.nodes_skipped + discoverReport.seeds_skipped}）`"
+          />
+          <el-button v-if="discoverReport" text type="primary" @click="goReview">去审核</el-button>
+        </el-col>
+      </el-row>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
 import { watchJob } from '../../api/jobs'
+import type { GraphNode, Paginated } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
+
+const router = useRouter()
+
+const discoverForm = ref({
+  queriesText: '',
+  market_id: null as number | null,
+  per_query: 10,
+  max_orgs: 20,
+  max_seeds: 30,
+})
+const discoverReport = ref<Record<string, number> | null>(null)
+const discovering = ref(false)
+const marketNodes = ref<GraphNode[]>([])
+
+async function loadMarketNodes() {
+  const page = await api.get<Paginated<GraphNode>>('/graph/nodes', {
+    node_type: 'market',
+    page_size: 500,
+  })
+  marketNodes.value = page.items.filter((node) => node.status === 'active')
+}
+
+async function doDiscover() {
+  const queries = discoverForm.value.queriesText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (!queries.length) {
+    ElMessage.warning('请至少填写一个检索关键词（每行一个）')
+    return
+  }
+  discovering.value = true
+  discoverReport.value = null
+  try {
+    const { job_id } = await api.post<{ job_id: number }>('/seeds/discover', {
+      queries,
+      from_node_ids: discoverForm.value.market_id ? [discoverForm.value.market_id] : [],
+      per_query: discoverForm.value.per_query,
+      max_orgs: discoverForm.value.max_orgs,
+      max_seeds: discoverForm.value.max_seeds,
+    })
+    const job = await watchJob(job_id)
+    if (job.status === 'completed') {
+      discoverReport.value = (job.result ?? {}) as Record<string, number>
+      ElMessage.success('检索扩充完成：结果已进入待审核')
+    } else {
+      ElMessage.error(job.error ?? '检索扩充失败')
+    }
+  } catch {
+    /* 客户端已提示 */
+  } finally {
+    discovering.value = false
+  }
+}
+
+function goReview() {
+  router.push('/seeds/review')
+}
+
+onMounted(loadMarketNodes)
 
 const exportForm = ref({
   format: 'txt',
@@ -198,5 +304,11 @@ async function copy(text: string) {
 }
 .result {
   margin-top: 10px;
+}
+.discover {
+  margin-top: 16px;
+}
+.tips {
+  margin-top: 8px;
 }
 </style>
