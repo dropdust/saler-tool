@@ -93,7 +93,13 @@ def _build_app(data_dir: Path):
     except Exception:  # noqa: BLE001
         logger.exception("启动维护任务失败（忽略，不影响使用）")
     token = AppToken()
-    return create_app(engine=engine, token=token.value), token.value
+    dist = _frontend_dist()
+    if not dist.is_dir() and not os.environ.get("SALER_DEV_URL"):
+        logger.warning(
+            f"未找到前端产物 {dist}：请先执行 `cd frontend && pnpm build`，"
+            "或设置 SALER_DEV_URL 指向 Vite 开发服务器"
+        )
+    return create_app(engine=engine, token=token.value, frontend_dist=dist), token.value
 
 
 def main() -> int:

@@ -54,6 +54,7 @@ def create_app(
     token: str | None = None,
     job_manager: JobManager | None = None,
     data_dir=None,
+    frontend_dist=None,
 ) -> FastAPI:
     if session_factory is None:
         if engine is None:
@@ -134,4 +135,16 @@ def create_app(
     app.include_router(campaigns.router, prefix=API_PREFIX)
     app.include_router(suppressions.router, prefix=API_PREFIX)
     app.include_router(content.router, prefix=API_PREFIX)
+
+    # 前端 SPA 静态托管（桌面壳加载；挂载在最后，不遮蔽 /api/v1 路由）
+    if frontend_dist is not None:
+        from pathlib import Path as _Path
+
+        from fastapi.staticfiles import StaticFiles
+
+        dist = _Path(frontend_dist)
+        if dist.is_dir():
+            app.mount("/", StaticFiles(directory=str(dist), html=True), name="spa")
+        else:
+            logger.warning(f"未找到前端构建产物：{dist}（界面将 404；请先构建前端或用 SALER_DEV_URL）")
     return app
