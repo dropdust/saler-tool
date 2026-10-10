@@ -13,7 +13,7 @@ from loguru import logger
 
 from saler import __version__
 from saler.api.errors import ApiError
-from saler.api.routes import ai, graph, jobs, llm, seeds, settings
+from saler.api.routes import ai, backup, graph, jobs, llm, seeds, settings
 from saler.core.errors import (
     DomainError,
     Duplicate,
@@ -46,6 +46,7 @@ def create_app(
     app_token = AppToken(token)
     app = FastAPI(title="Saler 本地 API", version=__version__, docs_url=None, redoc_url=None)
     app.state.session_factory = session_factory
+    app.state.engine = engine  # 供"恢复备份"等整库替换场景 dispose 用
     app.state.token = app_token
     app.state.job_manager = job_manager or JobManager(session_factory)
     app.state.data_dir = data_dir
@@ -101,8 +102,10 @@ def create_app(
 
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(settings.router, prefix=API_PREFIX)
+    app.include_router(settings.logs_router, prefix=API_PREFIX)
     app.include_router(graph.router, prefix=API_PREFIX)
     app.include_router(seeds.router, prefix=API_PREFIX)
     app.include_router(ai.router, prefix=API_PREFIX)
     app.include_router(llm.router, prefix=API_PREFIX)
+    app.include_router(backup.router, prefix=API_PREFIX)
     return app
