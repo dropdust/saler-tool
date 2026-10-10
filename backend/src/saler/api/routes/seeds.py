@@ -10,8 +10,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from saler.api.deps import get_session, paginate, pagination
+from saler.api.errors import unprocessable
 from saler.api.serializers import seed_to_dict
+from saler.core.leads.search_setup import resolve_search_chain
 from saler.core.seeds import service as seed_service
+from saler.core.seeds.discover import run_discover
 from saler.core.seeds.verifiers import run_validation
 from saler.services import export_seeds
 from saler.services.ingest_harvest import run_ingest
@@ -192,6 +195,32 @@ async def validate(payload: ValidateRequest, request: Request) -> dict:
             request.app.state.session_factory,
             payload=payload.model_dump(),
             delay_s=1.0,
+        ),
+    )
+    return {"job_id": job_id}
+
+
+class DiscoverRequest(BaseModel):
+    queries: list[str] = Field(min_length=1)
+    from_node_ids: list[int] = Field(default_factory=list)
+    per_query: int = 10
+    lang: str = "en"
+    max_orgs: int = 20
+    max_seeds: int = 30
+
+
+@router.post("/discover", status_code=202)
+async def discover(payload: DiscoverRequest, request: Request, db: Session = Depends(get_session)) -> dict:
+    """检索扩充图谱（FR-013）：关键词 → 检索渠道 → 候选实体/种子（全部进入待审核）。"""
+    chain = resolve_search_chain(db)
+    if chain is None:
+        raise unprocessable("尚未配置可用的检索渠道：请先在「设置 → 检索渠道」添加并启用")
+    manager = request.app.state.job_manager
+    job_id = manager.create("seed_discover", name="检索扩充图谱", params=payload.model_dump())
+    manager.start(
+        job_id,
+        lambda ctx: run_discover(
+            ctx, request.app.state.session_factory, chain, payload=payload.model_dump()
         ),
     )
     return {"job_id": job_id}
