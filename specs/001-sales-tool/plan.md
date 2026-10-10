@@ -37,19 +37,29 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**现状说明**：`.specify/memory/constitution.md` 仍是**未批准的模板占位**（无实际原则条目），无法按宪制门检查。**建议在实现前运行 `/speckit-constitution` 固化项目原则**（可参考下方"规格级门"作为初始原则素材）。
+**T145 复核（2026-10-11，对宪法 v1.1.0 的对照结论）**：实现完成后的对照检查，逐原则给出证据。
 
-**规格级门（替代检查，全部通过）**：
+| 原则 | 要求摘要 | 实现证据 | 结论 |
+|---|---|---|---|
+| I. 测试驱动开发 | 红→绿→重构；四层测试齐备；禁止弱化测试 | 196 个后端测试全绿（单元/契约/集成）；每个测试任务以"TDD 红阶段"独立提交后再提交实现；四类假 Provider（LLM/Search/Mail/SMS）全离线 | PASS |
+| II. 对象与封装 | core 不依赖 FastAPI/壳/SDK；凭证与外部能力走适配器；前端只吃本地 API 契约 | `core/` 无 FastAPI/httpx-业务耦合（httpx 仅适配器层）；LLM/检索/邮件/短信全部经 `providers/` Protocol + Registry；前端仅 `api/client.ts` 访问后端 | PASS（一处口径见 Complexity Tracking） |
+| III. 约定大于配置 | 目录/路径/契约一致；新增 Provider 零配置发现；默认开箱即用 | 路由前缀与 contracts/local-api.md 对照一致；新增 Provider = 实现 Protocol + `registry.register(MANIFEST)`，前端按 `config_schema` 动态表单；全部功能有合理默认值 | PASS |
+| IV. 技术栈限定 | Python ≥3.12 + Vue3/TS 桌面形态；拒绝重量级捆绑 | pyproject requires-python ≥3.12；前端依赖仅 Element Plus/ECharts/vue-i18n 等既有清单；无服务端网关类依赖 | PASS |
+| V. 密钥零入库 | 密钥不出现于源码/日志/导出/提交历史；加密存储 + 脱敏 | `EncryptedText`（Fernet）+ OS 钥匙串；`security/redact.py` 日志过滤器与序列化脱敏；契约测试包含"泄密假适配器"断言（响应永不含密钥）；全部测试用占位密钥 | PASS |
+| 附加约束 | 离线可管数据；外部调用用户主动；退订/限频/礼貌抓取；中文界面；Web 演进兼容 | 未配置 LLM 全链路可用（S12 路径 + useAiGate）；检索/发送/抓取均需用户配置与触发；`compliance/`（suppression/exclusion）+ 单站 ≥1s + robots 开关；API 面模块化命名即未来 Web 版接口面 | PASS |
+| 工作流质量门 | 逐任务提交；关键变更后 analyze；契约同步 | git 历史逐任务提交（T001–T150 均可追溯）；契约文件随实现同步（channels/campaigns 增补均属加性演进）；T146 运行 `/speckit-analyze` 收口 | PASS |
+
+**规格级门（首轮检查记录，保留）**：
 
 | 门 | 依据 | 结论 |
 |---|---|---|
 | 本地优先 / 数据主权：方案不得引入强制服务端依赖 | FR-002/003/033、Assumptions | PASS（全栈本地组件，无云依赖） |
 | 无强制云账号：离线可用，外部能力按需触发 | FR-003/032、SC-010 | PASS（AI/检索/发送均为用户主动+可配置凭据） |
-| 凭证安全：加密存储、脱敏展示、不出现在日志/导出 | FR-006 | PASS（§5 字段级加密 + OS 钥匙串 + 脱敏序列化） |
+| 凭证安全：加密存储、脱敏展示、不出现在日志/导出 | FR-006 | PASS（字段级加密 + OS 钥匙串 + 脱敏序列化） |
 | 跨平台一致：一套代码与产线覆盖三平台 | FR-001、SC-006 | PASS（差异集中在 WebView 基线与打包脚本） |
 | 可验证性：核心流程离线可测、验收场景明确 | quickstart.md、SC-001~011 | PASS（四类假 Provider + 12 个端到端场景） |
 
-**Phase 1 设计复核**：data-model.md / contracts/ / quickstart.md 与上述门逐条对照，无违反项。Complexity Tracking 为空。
+**Phase 1 设计复核**：data-model.md / contracts/ / quickstart.md 与上述门逐条对照，无违反项。
 
 ## Project Structure
 
@@ -117,4 +127,7 @@ packaging/
 
 ## Complexity Tracking
 
-无宪制（规格级门）违规项，无需豁免。
+**无违规项，无需豁免。** 一处口径说明（非豁免）：
+
+- **宪法 II.2「仓储」口径**：本实现以 `core/<domain>/service.py` 领域服务模块承载各聚合的数据访问边界（API 层与桌面壳不直连 ORM；无跨层查询）。未引入独立的 `Repository` 类层——服务模块即仓储。若未来多存储后端（如 PostgreSQL / Web 版）落地，再行按聚合拆分 Repository 接口；此为演进预留，不构成当前违规。
+- **Registry 全局态**：`providers/registry.py` 为"注册即发现"约定的模块级只读注册表（III.2 要求的零配置发现机制）；运行期仅写入不发生，非业务状态，不视为共享可变全局状态。
