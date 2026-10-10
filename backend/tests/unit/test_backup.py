@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import sessionmaker
 
+import saler.db.models  # noqa: F401
 from saler.core.errors import ValidationFailed
 from saler.db.base import Base
-import saler.db.models  # noqa: F401
 from saler.db.models import AppSetting
 from saler.db.session import make_engine
 from saler.services import backup as backup_service

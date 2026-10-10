@@ -94,8 +94,11 @@ def move_data_dir(old: Path | str, new: Path | str) -> dict:
         raise ValidationFailed("目标目录非空：请选择空目录或新目录")
 
     # 1) 落盘 WAL（单用户桌面，短暂独占可接受）
-    with sqlite3.connect(old / "saler.db") as con:
-        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    checkpoint = sqlite3.connect(old / "saler.db")
+    try:
+        checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        checkpoint.close()
 
     # 2) 复制全量数据
     shutil.copytree(old, new, dirs_exist_ok=True)
