@@ -43,6 +43,8 @@ export default {
   status: {
     pending: '待执行',
     running: '执行中',
+    fetching: '抓取中',
+    no_contact: '无联系方式',
     done: '已完成',
     invalid: '已失效',
     approved: '已采纳',

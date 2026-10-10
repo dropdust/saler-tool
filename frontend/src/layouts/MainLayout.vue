@@ -18,6 +18,7 @@
         <el-sub-menu index="leads">
           <template #title><el-icon><User /></el-icon><span>客户线索</span></template>
           <el-menu-item index="/leads/jobs">挖掘任务</el-menu-item>
+          <el-menu-item index="/leads/domains">候选域名</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/content">
           <el-icon><Document /></el-icon><span>营销内容</span>

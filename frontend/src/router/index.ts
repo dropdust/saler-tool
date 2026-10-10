@@ -58,6 +58,12 @@ const router = createRouter({
           component: () => import('../views/leads/CrawlJobs.vue'),
           meta: { title: '挖掘任务' },
         },
+        {
+          path: 'leads/domains',
+          name: 'leads-domains',
+          component: () => import('../views/leads/DomainList.vue'),
+          meta: { title: '候选域名' },
+        },
         { path: 'content', component: Placeholder, meta: { title: '营销内容（后续里程碑）' } },
         { path: 'channels', component: Placeholder, meta: { title: '营销通道（后续里程碑）' } },
         { path: 'campaigns', component: Placeholder, meta: { title: '营销计划（后续里程碑）' } },
