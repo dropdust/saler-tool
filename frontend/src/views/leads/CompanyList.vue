@@ -2,8 +2,16 @@
   <div>
     <PageHeader title="客户列表" description="挖掘与导入得到的客户公司：状态推进、标签与合并去重。">
       <template #actions>
-        <el-button :disabled="selected.length < 2" @click="openMerge">合并选中（{{ selected.length }}）</el-button>
-        <el-button @click="load">刷新</el-button>
+        <el-switch
+          v-model="virtualMode"
+          active-text="大列表模式"
+          :disabled="loading"
+          @change="onVirtualToggle"
+        />
+        <el-button :disabled="virtualMode || selected.length < 2" @click="openMerge">
+          合并选中（{{ selected.length }}）
+        </el-button>
+        <el-button @click="virtualMode ? loadVirtual() : load()">刷新</el-button>
       </template>
     </PageHeader>
 
@@ -34,7 +42,17 @@
     </el-card>
 
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="items" @selection-change="onSelectionChange">
+      <template v-if="virtualMode">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="hint"
+          :title="`大列表模式（虚拟滚动）：已加载 ${virtualRows.length} / 共 ${total} 行${virtualRows.length < total ? '（上限 ' + VIRTUAL_MAX + '，可用筛选缩小范围）' : ''}；多选合并请切回标准模式`"
+        />
+        <VirtualTable :columns="virtualColumns" :data="virtualRows" />
+      </template>
+      <el-table v-else v-loading="loading" :data="items" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="42" />
         <el-table-column label="公司" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
@@ -65,6 +83,7 @@
         </el-table-column>
       </el-table>
       <el-pagination
+        v-if="!virtualMode"
         v-model:current-page="page"
         class="pager"
         layout="total, prev, pager, next"
@@ -93,13 +112,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElButton, ElMessage, ElTag } from 'element-plus'
 import { api } from '../../api/client'
 import type { CompanyRow, Paginated } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
+import VirtualTable from '../../components/tables/VirtualTable.vue'
 
 const router = useRouter()
 const items = ref<CompanyRow[]>([])
@@ -160,6 +180,85 @@ async function submitMerge() {
   mergeVisible.value = false
   await load()
 }
+
+const VIRTUAL_MAX = 20000
+const virtualMode = ref(false)
+const virtualRows = ref<any[]>([])
+
+function onVirtualToggle(value: string | number | boolean) {
+  if (value) {
+    loadVirtual()
+  } else {
+    virtualRows.value = []
+    load()
+  }
+}
+
+/** 大列表模式：内部按 500/页翻页聚合（上限 VIRTUAL_MAX 行后交由虚拟滚动渲染）。 */
+async function loadVirtual() {
+  loading.value = true
+  try {
+    const rows: CompanyRow[] = []
+    let current = 1
+    for (;;) {
+      const result = await api.get<Paginated<CompanyRow>>('/companies', {
+        ...filters.value,
+        page: current,
+        page_size: 500,
+      })
+      rows.push(...result.items)
+      total.value = result.total
+      if (rows.length >= Math.min(result.total, VIRTUAL_MAX) || !result.items.length) break
+      current += 1
+    }
+    virtualRows.value = rows
+  } finally {
+    loading.value = false
+  }
+}
+
+const virtualColumns = computed(() => [
+  {
+    key: 'name',
+    title: '公司',
+    dataKey: 'name',
+    width: 280,
+    cellRenderer: ({ rowData }: { rowData: CompanyRow }) =>
+      h('span', {}, [
+        rowData.name || '(未命名)',
+        rowData.is_excluded ? h(ElTag, { type: 'danger', size: 'small', class: 'chip' }, () => '已排除') : null,
+      ]),
+  },
+  { key: 'domain', title: '域名', dataKey: 'domain', width: 220 },
+  {
+    key: 'geo',
+    title: '国家/语言',
+    width: 130,
+    cellRenderer: ({ rowData }: { rowData: CompanyRow }) =>
+      `${rowData.country || '—'} / ${rowData.language || '—'}`,
+  },
+  {
+    key: 'status',
+    title: '状态',
+    width: 110,
+    cellRenderer: ({ rowData }: { rowData: CompanyRow }) => h(StatusTag, { status: rowData.status }),
+  },
+  { key: 'contacts_count', title: '联系方式', dataKey: 'contacts_count', width: 100 },
+  {
+    key: 'tags',
+    title: '标签',
+    width: 200,
+    cellRenderer: ({ rowData }: { rowData: CompanyRow }) => (rowData.tags || []).join('、') || '—',
+  },
+  { key: 'source', title: '来源', dataKey: 'source', width: 90 },
+  {
+    key: 'actions',
+    title: '操作',
+    width: 90,
+    cellRenderer: ({ rowData }: { rowData: CompanyRow }) =>
+      h(ElButton, { size: 'small', text: true, type: 'primary', onClick: () => openDetail(rowData) }, () => '详情'),
+  },
+])
 
 onMounted(load)
 </script>
