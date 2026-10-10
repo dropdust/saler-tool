@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
+import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from platformdirs import user_data_dir
@@ -18,10 +22,26 @@ def default_data_dir() -> Path:
     return Path(user_data_dir(APP_NAME))
 
 
+def _read_pointer() -> Path | None:
+    """平台默认目录下的迁移指针（relocation.json，原子写入）。"""
+    pointer = default_data_dir() / "relocation.json"
+    try:
+        if pointer.exists():
+            data = json.loads(pointer.read_text(encoding="utf-8"))
+            target = Path(str(data.get("data_dir", "")))
+            if target and target.exists():
+                return target
+    except Exception:  # 指针损坏则回退默认目录
+        pass
+    return None
+
+
 def resolve_data_dir() -> Path:
-    """``SALER_DATA_DIR`` 环境变量优先；否则平台惯例目录。"""
+    """解析顺序：``SALER_DATA_DIR`` 环境变量 > 迁移指针 > 平台惯例目录。"""
     env = os.environ.get("SALER_DATA_DIR")
-    return Path(env) if env else default_data_dir()
+    if env:
+        return Path(env)
+    return _read_pointer() or default_data_dir()
 
 
 def ensure_layout(data_dir: Path | str) -> Path:
@@ -52,3 +72,83 @@ def check_writable(path: Path | str) -> tuple[bool, str]:
 
 def db_path(data_dir: Path | str) -> Path:
     return Path(data_dir) / "saler.db"
+
+
+def move_data_dir(old: Path | str, new: Path | str) -> dict:
+    """复制 → 核对 → 原子指针切换（FR-033）。
+
+    旧数据保留在原有位置（由用户确认后自行删除）；运行时热切换不做，
+    写入迁移指针后需重启应用生效。
+    """
+    from saler.core.errors import ValidationFailed
+
+    old, new = Path(old), Path(new)
+    if not (old / "saler.db").exists():
+        raise ValidationFailed("源目录缺少 saler.db，无法迁移")
+    if old.resolve() == new.resolve():
+        raise ValidationFailed("目标目录与当前数据目录相同")
+    ok, message = check_writable(new)
+    if not ok:
+        raise ValidationFailed(message)
+    if any(new.iterdir()):
+        raise ValidationFailed("目标目录非空：请选择空目录或新目录")
+
+    # 1) 落盘 WAL（单用户桌面，短暂独占可接受）
+    with sqlite3.connect(old / "saler.db") as con:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    # 2) 复制全量数据
+    shutil.copytree(old, new, dirs_exist_ok=True)
+
+    # 3) 核对：文件清单（忽略 WAL 临时文件）与主库 sha256
+    def _manifest(root: Path) -> dict[str, int]:
+        return {
+            str(path.relative_to(root)): path.stat().st_size
+            for path in sorted(root.rglob("*"))
+            if path.is_file() and not path.name.endswith(("-wal", "-shm"))
+        }
+
+    source_files, target_files = _manifest(old), _manifest(new)
+    missing = sorted(set(source_files) - set(target_files))
+    if missing:
+        raise ValidationFailed(f"复制不完整，缺少 {len(missing)} 个文件（如 {missing[:3]}）")
+
+    def _sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    source_sha, target_sha = _sha256(old / "saler.db"), _sha256(new / "saler.db")
+    if source_sha != target_sha:
+        raise ValidationFailed("主库校验不一致（数据目录可能正在写入）：请稍后重试迁移")
+
+    # 4) 原子指针切换：指针位于平台默认目录；迁回默认目录时清除指针
+    pointer = default_data_dir() / "relocation.json"
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    if new.resolve() == default_data_dir().resolve():
+        pointer.unlink(missing_ok=True)
+    else:
+        tmp = pointer.with_name("relocation.json.tmp")
+        tmp.write_text(
+            json.dumps(
+                {
+                    "data_dir": str(new),
+                    "moved_from": str(old),
+                    "moved_at": datetime.now(UTC).isoformat(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        os.replace(tmp, pointer)
+
+    return {
+        "new_data_dir": str(new),
+        "files_copied": len(target_files),
+        "db_sha256": target_sha,
+        "restart_required": True,
+        "note": "旧数据已保留在原有位置；确认无误后可自行删除。重启应用后生效。",
+    }
