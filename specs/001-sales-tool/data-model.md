@@ -24,7 +24,7 @@
 │ validation_ │   │ suppression      │                        │ send_record    │
 │  record     │   │ exclusion_rule   │                        └────────────────┘
 └─────────────┘   └──────────────────┘
-系统：llm_provider / search_provider / app_setting / operation_log / backup_record
+系统：llm_provider / search_provider / app_setting / operation_log / backup_record / job
 ```
 
 ---
@@ -106,7 +106,7 @@
 | id | INTEGER PK | |
 | domain_id | INTEGER FK→domain | |
 | seed_id | INTEGER FK→seed | |
-| job_id | INTEGER FK→crawl_job NULL | 哪次挖掘命中 |
+| job_id | INTEGER FK→job NULL | 哪次任务命中（通用任务台账，见 E6） |
 | first_seen_at | TEXT | |
 
 **唯一约束**：`UNIQUE(domain_id, seed_id)`。产量计数以此表 `COUNT(DISTINCT)` 校准（FR-015/016）。
@@ -418,6 +418,26 @@
 | size_bytes | INTEGER | |
 | checksum | TEXT | |
 | created_at | TEXT | |
+
+### E6. `job` 通用任务（异步任务台账）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | INTEGER PK | |
+| job_type | TEXT | `ai_seed_expand` / `ai_seed_translate` / `ingest_harvest` / `seed_validate` / `crawl` / `send` … |
+| name | TEXT NULL | 展示名 |
+| status | TEXT | `queued` / `running` / `paused` / `completed` / `failed` / `cancelled` |
+| params | JSON | 创建参数（请求快照） |
+| progress | JSON | 最近一次进度（SSE 快照用） |
+| result | JSON NULL | 终态结果 |
+| error | TEXT NULL | 失败信息 |
+| ref_type / ref_id | TEXT / INTEGER NULL | 关联领域对象（campaign / crawl_job 等） |
+| started_at / finished_at | TEXT NULL | |
+| created_at / updated_at | TEXT | |
+
+> 说明：所有长任务（AI 扩充/翻译、回灌、校验、挖掘、发送）都在本表登记，
+> 支撑 `contracts/local-api.md` 的 Job 模式（详情 / SSE / 暂停 / 恢复 / 取消）。
+> `crawl_job` 保留为挖掘领域明细（scope/config/stats），与本表通过 ref 关联。
 
 ---
 
