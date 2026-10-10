@@ -16,6 +16,7 @@ from saler.api.errors import ApiError
 from saler.api.routes import (
     ai,
     backup,
+    channels,
     companies,
     content,
     crawl,
@@ -128,6 +129,7 @@ def create_app(
     app.include_router(companies.router, prefix=API_PREFIX)
     app.include_router(search_providers.router, prefix=API_PREFIX)
     app.include_router(exclusion_rules.router, prefix=API_PREFIX)
+    app.include_router(channels.router, prefix=API_PREFIX)
     app.include_router(suppressions.router, prefix=API_PREFIX)
     app.include_router(content.router, prefix=API_PREFIX)
     return app

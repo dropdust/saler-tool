@@ -277,3 +277,29 @@ def content_variant_to_dict(variant, *, current=None) -> dict[str, Any]:
         "created_at": iso(variant.created_at),
         "updated_at": iso(variant.updated_at),
     }
+
+
+def channel_to_dict(row) -> dict[str, Any]:
+    """发送通道（FR-040~044）：密钥只写不读回；config 中疑似密钥键做防御性脱敏。"""
+    from saler.security.redact import redact, scrub_text
+
+    return {
+        "id": row.id,
+        "name": row.name,
+        "channel_type": row.channel_type,
+        "config": redact(row.config or {}),
+        "identity": row.identity or {},
+        "daily_limit": row.daily_limit,
+        "rate_per_minute": row.rate_per_minute,
+        "concurrency": row.concurrency,
+        "status": row.status,
+        "health": row.health,
+        "last_check_at": iso(row.last_check_at),
+        "last_check_result": scrub_text(row.last_check_result or "") or None,
+        "used_today": row.used_today,
+        "used_today_date": row.used_today_date,
+        "total_sent": row.total_sent,
+        "secret_set": bool(row.secret_encrypted),
+        "created_at": iso(row.created_at),
+        "updated_at": iso(row.updated_at),
+    }
