@@ -101,7 +101,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 ### Tests for User Story 3 ⚠️（先写，确认失败）
 
 - [X] T166 [P] [US3] palette 单测（红）：`frontend/tests/theme-palette.test.ts`——`readThemePalette()` 读取 mock computed 的 `--el-color-success/warning/primary/info`、`--el-text-color-primary`、`--el-bg-color-overlay`、`--el-border-color`、`--chart-edge-*`；变量缺失时兜底色；节点状态色语义映射不变（contacts>0→success、done>0→warning、seeds>0→primary、其余→info，R5）
-- [ ] T167 [P] [US3] GraphView 主题化单测（红）：`frontend/tests/graphview-theme.test.ts`——mock `echarts`（不触真实 canvas）：主题值变化触发 setOption 重渲；节点/边线/label/tooltip 颜色取自 palette
+- [X] T167 [P] [US3] GraphView 主题化单测（红）：`frontend/tests/graphview-theme.test.ts`——mock `echarts`（不触真实 canvas）：主题值变化触发 setOption 重渲；节点/边线/label/tooltip 颜色取自 palette
 
 ### Implementation for User Story 3
 
