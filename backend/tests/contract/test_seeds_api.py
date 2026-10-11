@@ -195,6 +195,20 @@ class TestSeedLangsEndpoint:
             assert resp.status_code == 201, resp.text
         assert client.get("/api/v1/seeds/langs").json() == ["en", "ru", "zh"]
 
+    def test_variants_and_nonstandard_codes_preserved(self, client):
+        """US3/FR-006：非标准代码原样返回；大小写变体并存（不折叠、不归并）。"""
+        for query, lang in [("s-en-lower", "en"), ("s-en-upper", "EN"), ("s-ko", "ko")]:
+            resp = client.post("/api/v1/seeds", json={"query": query, "lang": lang})
+            assert resp.status_code == 201, resp.text
+        assert client.get("/api/v1/seeds/langs").json() == ["EN", "en", "ko"]
+
+    def test_new_values_appear_immediately(self, client):
+        """US3/FR-006：新入库取值即时出现在返回值（选项覆盖的数据源）。"""
+        client.post("/api/v1/seeds", json={"query": "s-ar", "lang": "ar"})
+        assert client.get("/api/v1/seeds/langs").json() == ["ar"]
+        client.post("/api/v1/seeds", json={"query": "s-ko-2", "lang": "ko"})
+        assert client.get("/api/v1/seeds/langs").json() == ["ar", "ko"]
+
 
 class TestSeedLangFilter:
     """T182 契约测试（行为锁定）：GET /seeds?lang= 精确筛选与组合（FR-002/003/009）。
