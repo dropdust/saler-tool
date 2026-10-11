@@ -194,3 +194,82 @@ class TestSeedLangsEndpoint:
             resp = client.post("/api/v1/seeds", json={"query": query, "lang": lang})
             assert resp.status_code == 201, resp.text
         assert client.get("/api/v1/seeds/langs").json() == ["en", "ru", "zh"]
+
+
+class TestSeedLangFilter:
+    """T182 契约测试（行为锁定）：GET /seeds?lang= 精确筛选与组合（FR-002/003/009）。
+
+    lang 过滤在 001 已实现——本类将其正式化为契约并锁定行为（书写即绿属预期）。
+    """
+
+    def _mk(self, client, query: str, lang: str = "en", **extra) -> dict:
+        resp = client.post("/api/v1/seeds", json={"query": query, "lang": lang, **extra})
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    def test_exact_match_only_case_variants_are_distinct(self, client):
+        self._mk(client, "арматура оптом", lang="ru")
+        self._mk(client, "fittings wholesale", lang="en")
+        self._mk(client, "FITTINGS UPPER", lang="EN")
+
+        ru = client.get("/api/v1/seeds", params={"lang": "ru"}).json()
+        assert ru["total"] == 1
+        assert [seed["query"] for seed in ru["items"]] == ["арматура оптом"]
+
+        upper = client.get("/api/v1/seeds", params={"lang": "EN"}).json()
+        assert upper["total"] == 1
+        assert [seed["query"] for seed in upper["items"]] == ["FITTINGS UPPER"]
+
+        lower = client.get("/api/v1/seeds", params={"lang": "en"}).json()
+        assert lower["total"] == 1
+        assert [seed["query"] for seed in lower["items"]] == ["fittings wholesale"]
+
+    def test_absent_lang_means_no_restriction(self, client):
+        self._mk(client, "lang-ru seed", lang="ru")
+        self._mk(client, "lang-en seed", lang="en")
+        assert client.get("/api/v1/seeds").json()["total"] == 2
+
+    def test_combines_with_q_status_and_review_as_intersection(self, client):
+        a = self._mk(client, "арматура оптом", lang="ru")
+        b = self._mk(client, "арматура розница", lang="ru")
+        self._mk(client, "арматура оптом en", lang="en")
+        pending = self._mk(client, "llm ru candidate", lang="ru", source="llm")
+        client.put(f"/api/v1/seeds/{b['id']}", json={"status": "done"})
+
+        by_q = client.get("/api/v1/seeds", params={"lang": "ru", "q": "арматура"}).json()
+        assert by_q["total"] == 2
+        assert {seed["id"] for seed in by_q["items"]} == {a["id"], b["id"]}
+
+        by_status = client.get("/api/v1/seeds", params={"lang": "ru", "status": "done"}).json()
+        assert by_status["total"] == 1
+        assert [seed["id"] for seed in by_status["items"]] == [b["id"]]
+
+        by_review = client.get(
+            "/api/v1/seeds", params={"lang": "ru", "review_status": "pending"}
+        ).json()
+        assert [seed["id"] for seed in by_review["items"]] == [pending["id"]]
+
+        combo = client.get(
+            "/api/v1/seeds",
+            params={"lang": "ru", "review_status": "approved", "status": "pending"},
+        ).json()
+        assert [seed["id"] for seed in combo["items"]] == [a["id"]]
+
+        empty = client.get("/api/v1/seeds", params={"lang": "ru", "q": "dubai"}).json()
+        assert empty["total"] == 0 and empty["items"] == []
+
+    def test_no_match_returns_empty_200(self, client):
+        self._mk(client, "plain seed", lang="en")
+        resp = client.get("/api/v1/seeds", params={"lang": "xx"})
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+        assert resp.json()["items"] == []
+
+    def test_filter_is_read_only(self, client):
+        seed = self._mk(client, "ro seed", lang="ru")
+        before = client.get(f"/api/v1/seeds/{seed['id']}").json()
+        for _ in range(3):
+            client.get("/api/v1/seeds", params={"lang": "ru"})
+            client.get("/api/v1/seeds", params={"lang": "xx"})
+        after = client.get(f"/api/v1/seeds/{seed['id']}").json()
+        assert after == before

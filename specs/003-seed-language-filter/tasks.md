@@ -58,7 +58,7 @@ description: "Task list for 种子列表语言筛选"
 
 ### Tests for User Story 1 ⚠️（先写，确认失败）
 
-- [ ] T182 [P] [US1] 后端契约测试（**行为锁定，书写即绿**）：`backend/tests/contract/test_seeds_api.py` 新增 `TestSeedLangFilter`——`GET /seeds?lang=ru` 仅返回 ru（另建 en 对照）；精确匹配（`EN` 与 `en` 互不混淆）；与 `status`/`review_status`/`q` 组合为交集且 `total` 一致；无匹配 → `200` + `total:0`、`items:[]`；**无副作用**（筛选前后数据不变，FR-009）（contracts §1；FR-002/003）
+- [X] T182 [P] [US1] 后端契约测试（**行为锁定，书写即绿**）：`backend/tests/contract/test_seeds_api.py` 新增 `TestSeedLangFilter`——`GET /seeds?lang=ru` 仅返回 ru（另建 en 对照）；精确匹配（`EN` 与 `en` 互不混淆）；与 `status`/`review_status`/`q` 组合为交集且 `total` 一致；无匹配 → `200` + `total:0`、`items:[]`；**无副作用**（筛选前后数据不变，FR-009）（contracts §1；FR-002/003）——5 项书写即绿（契约锁定）
 - [ ] T183 [P] [US1] 组件测试（红）：`frontend/tests/seed-lang-filter.test.ts`——mock `src/api/client` 按路径分发（`/graph/nodes`、`/seeds/langs`、`/seeds`、`/llm/providers`），挂载复用 002 `theme-switch.test.ts` 模式（Pinia + memory Router + ElementPlus）：① 渲染"语言"筛选控件（`data-test="lang-filter"`）且默认未选择；② 选项 = 标准 17 语言 + `/seeds/langs` 返回的非标准值（标准语言即使库内无种子也在列）；③ 经 v-model 选 `ru` + 点"查询" → `/seeds` 请求参数含 `lang:'ru'` 且 `page:1`；④ 清除 + 查询 → 请求不含 `lang`；⑤ 翻到第 2 页后再查询 → `page:1`（FR-008）；⑥ 结果为空 → 表格空态文案"没有符合当前筛选条件的种子"（FR-007）
 
 ### Implementation for User Story 1
