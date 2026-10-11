@@ -60,8 +60,9 @@
 | GET/POST | `/graph/nodes/{id}/terms`；PUT/DELETE `/graph/terms/{id}` | 词表管理（FR-009） |
 | GET/POST | `/graph/edges`；DELETE `/graph/edges/{id}` | 关系管理（FR-008） |
 | GET | `/graph/overview?batch=&market=` | 可视化数据：节点/边 + 覆盖率与产量着色数据（FR-017） |
-| GET/POST | `/seeds`；PUT/DELETE(`停用`) `/seeds/{id}`；POST `/seeds/bulk` | 种子 CRUD 与批量（FR-010/011） |
+| GET/POST | `/seeds`（列表筛选含 `lang` 等组合条件；精确匹配，003）；PUT/DELETE(`停用`) `/seeds/{id}`；POST `/seeds/bulk` | 种子 CRUD 与批量（FR-010/011） |
 | GET | `/seeds/stats?group_by=product_line|persona|market|batch` | 产量统计与排序（FR-015） |
+| GET | `/seeds/langs` | 库内语言取值（语言筛选选项数据源，003；去重精确值、不折叠大小写） |
 | POST | `/seeds/export` | `{filters, format: txt|csv}` → 导出执行清单（FR-016） |
 | POST | `/seeds/ingest` | 回灌外部执行结果（格式见 data-exchange.md） → job（FR-016） |
 | POST | `/seeds/validate` | 真实性/相关性校验 `{seed_ids|node_ids[]}` → job（FR-014） |

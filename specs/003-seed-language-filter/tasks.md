@@ -111,7 +111,7 @@ description: "Task list for 种子列表语言筛选"
 
 **Purpose**: 契约/文档同步、性能与回归验收、一致性审查
 
-- [ ] T191 [P] 契约与文档同步：`specs/001-sales-tool/contracts/local-api.md` 种子知识库表增补 `GET /seeds/langs` 行、`GET/POST /seeds` 行说明补记 lang 筛选（003）；`specs/001-sales-tool/quickstart.md` S4 步骤补"在种子列表按语言筛选（003 增量）"（宪法"契约变更必须同步"）
+- [X] T191 [P] 契约与文档同步：`specs/001-sales-tool/contracts/local-api.md` 种子知识库表增补 `GET /seeds/langs` 行、`GET/POST /seeds` 行说明补记 lang 筛选（003）；`specs/001-sales-tool/quickstart.md` S4 步骤补"在种子列表按语言筛选（003 增量）"（宪法"契约变更必须同步"）
 - [ ] T192 [P] 性能与回归验收（quickstart L5）：脚本生成 10,000 条种子数据集 → 应用/清除语言筛选记录呈现时间 ≤ 1s（SC-005）且与既有同类筛选无可见退化；走查既有能力（排序、翻页、勾选、翻译、编辑、失效）回归缺陷 0（SC-007）；结论勾注 quickstart
 - [ ] T193 回归与一致性：全量测试绿（`cd backend && uv run pytest` / `cd frontend && pnpm test && pnpm lint && pnpm build`）；`/speckit-analyze` 一致性审查（spec/plan/tasks/契约，0 CRITICAL、覆盖 100%）；处置项记入 spec/契约注记
 
