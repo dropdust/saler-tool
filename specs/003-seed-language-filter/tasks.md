@@ -78,7 +78,7 @@ description: "Task list for 种子列表语言筛选"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T186 [US2] 组件测试（**书写即绿——US1 的 `load()` 即满足，若红则修复实现**）：`frontend/tests/seed-lang-filter.test.ts` 增补——① 选项随列表刷新同步：查询/翻页/操作后再次调用 `/seeds/langs`，新返回的语言值立即出现在选项中（FR-006 不变量）；② 在语言筛选结果内执行"失效"操作 → 刷新请求仍携带当前 `lang`（语言条件保持、不清零，FR-010）
+- [X] T186 [US2] 组件测试（**书写即绿——US1 的 `load()` 即满足**）：`frontend/tests/seed-lang-filter.test.ts` 增补——① 选项随列表刷新同步：查询后再次调用 `/seeds/langs`，新返回的语言值立即出现在选项中（FR-006 不变量）；② 在语言筛选结果内执行"失效"操作 → 刷新请求仍携带当前 `lang`（语言条件保持、不清零，FR-010）——2 项书写即绿（vitest 31 通过，零额外实现得到证实）
 
 ### Implementation for User Story 2
 

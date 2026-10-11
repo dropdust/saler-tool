@@ -168,4 +168,50 @@ describe('SeedList 语言筛选（US1）', () => {
     const wrapper = await mountList()
     expect(wrapper.find('.el-table__empty-text').text()).toContain('没有符合当前筛选条件的种子')
   })
+
+  it('选项随列表刷新同步：查询后重新拉取 /seeds/langs，新语言值立即可选（FR-006）', async () => {
+    let langsCall = 0
+    mockedApi.get.mockImplementation(async (path: string) => {
+      if (path === '/seeds/langs') {
+        langsCall += 1
+        return langsCall === 1 ? ['en', 'ru'] : ['en', 'ru', 'ko']
+      }
+      if (path === '/graph/nodes') return { items: [], total: 0 }
+      if (path === '/llm/providers') return []
+      if (path === '/seeds') return { items: [seedRow()], total: 1, page: 1, page_size: 50 }
+      return { items: [], total: 0 }
+    })
+    const wrapper = await mountList()
+    let values = langSelect(wrapper)
+      .findAllComponents(ElOption)
+      .map((option) => option.props('value'))
+    expect(values).not.toContain('ko')
+
+    await clickQuery(wrapper)
+    await flushPromises()
+
+    values = langSelect(wrapper)
+      .findAllComponents(ElOption)
+      .map((option) => option.props('value'))
+    expect(values).toContain('ko')
+    expect(langsCall).toBeGreaterThanOrEqual(2)
+  })
+
+  it('结果内操作（失效）后：刷新请求仍携带当前语言条件（FR-010）', async () => {
+    mockedApi.del.mockResolvedValue({ ok: true })
+    const wrapper = await mountList()
+    langSelect(wrapper).vm.$emit('update:modelValue', 'ru')
+    await nextTick()
+    await clickQuery(wrapper)
+    await flushPromises()
+    expect(lastSeedsParams().lang).toBe('ru')
+
+    const disableButton = wrapper.findAll('button').find((item) => item.text() === '失效')
+    expect(disableButton).toBeTruthy()
+    await disableButton!.trigger('click')
+    await flushPromises()
+
+    expect(mockedApi.del).toHaveBeenCalledWith('/seeds/1')
+    expect(lastSeedsParams().lang).toBe('ru')
+  })
 })
