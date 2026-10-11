@@ -7,8 +7,10 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from loguru import logger
 
 from saler import __version__
@@ -43,8 +45,34 @@ from saler.core.errors import (
 from saler.db.session import make_session_factory
 from saler.jobs.engine import JobManager
 from saler.security.token import AppToken
+from saler.services import settings_service
 
 API_PREFIX = "/api/v1"
+
+_HTML_OPEN_RE = re.compile(r"<html\b([^>]*)>", re.IGNORECASE)
+
+
+def _inject_theme_dark(html: str) -> str:
+    """把 dark 类合并进 <html> 起始标签（002-frontend-theme，契约 §2）。
+
+    未匹配到时原样返回并告警——前端启动同步（syncFromServer）会兜底校正。
+    """
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1)
+        class_match = re.search(r'class="([^"]*)"', attrs)
+        if class_match:
+            classes = f"{class_match.group(1)} dark".strip()
+            attrs = attrs[: class_match.start()] + f'class="{classes}"' + attrs[class_match.end() :]
+        else:
+            attrs = f'{attrs} class="dark"'
+        return f"<html{attrs}>"
+
+    new_html, count = _HTML_OPEN_RE.subn(repl, html, count=1)
+    if count == 0:
+        logger.warning("index.html 未匹配 <html> 起始标签：主题注入跳过（前端启动同步兜底）")
+        return html
+    return new_html
 
 
 def create_app(
@@ -144,6 +172,30 @@ def create_app(
 
         dist = _Path(frontend_dist)
         if dist.is_dir():
+            index_file = dist / "index.html"
+            if index_file.is_file():
+
+                @app.get("/", include_in_schema=False)
+                def spa_index() -> Response:
+                    """HTML 入口：注入当前主题类实现首屏零闪变（FR-007，契约 §2）。
+
+                    hash 路由下 HTML 入口唯一；读取失败一律按 light，不阻断启动（FR-006）。
+                    """
+                    html = index_file.read_text(encoding="utf-8")
+                    try:
+                        with session_factory() as session:
+                            theme = settings_service.get(session, "ui_theme", "light")
+                    except Exception:  # noqa: BLE001 —— 注入失败降级为 light，前端仍可校正
+                        logger.warning("读取 ui_theme 失败：首屏按 light 返回")
+                        theme = "light"
+                    if theme == "dark":
+                        html = _inject_theme_dark(html)
+                    return Response(
+                        content=html,
+                        media_type="text/html",
+                        headers={"Cache-Control": "no-store"},
+                    )
+
             app.mount("/", StaticFiles(directory=str(dist), html=True), name="spa")
         else:
             logger.warning(f"未找到前端构建产物：{dist}（界面将 404；请先构建前端或用 SALER_DEV_URL）")

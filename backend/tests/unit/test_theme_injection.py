@@ -20,7 +20,7 @@ INDEX_HTML_WITH_CLASS = '<!doctype html>\n<html lang="zh-CN" class="foo">\n<body
 
 def _make_dist(tmp_path, index: str = INDEX_HTML):
     dist = tmp_path / "dist"
-    (dist / "assets").mkdir(parents=True)
+    (dist / "assets").mkdir(parents=True, exist_ok=True)
     (dist / "index.html").write_text(index, encoding="utf-8")
     (dist / "assets" / "app.js").write_text("console.log('ok')", encoding="utf-8")
     return dist
