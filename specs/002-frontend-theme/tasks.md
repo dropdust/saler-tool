@@ -119,7 +119,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 **Purpose**: 契约/文档同步、冻结包冒烟、回归与一致性
 
-- [ ] T173 [P] 契约与文档同步：`specs/001-sales-tool/contracts/local-api.md` settings 行补记 `ui_theme` 键与值域；`specs/001-sales-tool/quickstart.md` S1 增补"首启默认 light + 页头切换可达"断言（宪法"契约变更必须同步"）
+- [X] T173 [P] 契约与文档同步：`specs/001-sales-tool/contracts/local-api.md` settings 行补记 `ui_theme` 键与值域；`specs/001-sales-tool/quickstart.md` S1 增补"首启默认 light + 页头切换可达"断言（宪法"契约变更必须同步"）
 - [ ] T174 [P] 冻结包冒烟增量（quickstart T6）：本机 Linux 以构建产物执行 ①–⑤（首启 light / 切换即时 / 重启保持且无闪变录屏 / 图谱 dark 可读 / 备份恢复保留）；Windows/macOS 项并入 001 S12 发布流程执行
 - [ ] T175 回归与一致性：全量测试绿（`backend` pytest + `frontend` vitest + `pnpm build`/`vue-tsc`）；运行 `/speckit-analyze` 对 002 工件做一致性审查并处置发现项
 

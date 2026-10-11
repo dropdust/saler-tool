@@ -32,7 +32,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET/PUT | `/settings` | 应用设置（数据目录、代理、界面语言、回退语言、抓取/发送默认值） |
+| GET/PUT | `/settings` | 应用设置（数据目录、代理、界面语言、**界面主题 `ui_theme`（枚举 light/dark，默认 light，非法值 400；002 增补）**、回退语言、抓取/发送默认值） |
 | POST | `/settings/data-dir/validate` | 校验目标目录可写、空间充足（FR-033） |
 | POST | `/settings/data-dir/move` | 迁移数据目录 → job |
 | POST | `/backups` | 生成备份归档 → job；GET `/backups` 列表 |
