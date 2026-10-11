@@ -1,0 +1,34 @@
+/*
+ * 主题基座（002-frontend-theme）
+ * - html/body 基底：随 Element Plus 亮/暗变量呈现（html.dark 类由后端注入或前端切换，契约见 contracts/theme-contract.md §3）
+ * - color-scheme 双态：原生滚动条/表单控件跟随主题
+ * - 图表专用变量：ECharts canvas 不消费 --el-*，亮/暗双套在此定义（GraphView 经 palette 读取）
+ * - 内容保真基底：营销内容预览 = "收件人视角"，两主题同值、不随主题变化（FR-010）
+ */
+
+:root {
+  color-scheme: light;
+
+  /* 图表专用（亮） */
+  --chart-edge-solid: #b1b3b8;
+  --chart-edge-dashed: #7a7d85;
+
+  /* 内容保真基底（两主题同值，勿在 html.dark 改写） */
+  --preview-surface-bg: #ffffff;
+  --preview-surface-fg: #303133;
+  --preview-surface-border: #e4e7ed;
+}
+
+html.dark {
+  color-scheme: dark;
+
+  /* 图表专用（暗） */
+  --chart-edge-solid: #5c5f66;
+  --chart-edge-dashed: #8a8d94;
+}
+
+html,
+body {
+  background-color: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+}
