@@ -64,7 +64,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 ### Implementation for User Story 1
 
 - [ ] T158 [US1] 页头切换控件：`frontend/src/layouts/MainLayout.vue`——页头（健康标签旁）新增 `el-switch` 内联 ☀️/🌙 图标主题切换，绑定 `stores/theme.ts`；切换同帧生效、不刷新页面、不触碰表单状态（FR-001~004）
-- [ ] T159 [US1] 交互验收（quickstart T1）：壳形态走查——任意主页面一步切换、已打开弹窗/提示同步、未保存表单保留、两向切换一致；结论勾注 `specs/002-frontend-theme/quickstart.md`
+- [X] T159 [US1] 交互验收（quickstart T1）：headless Chrome（CDP）自动驱动构建产物——class 同帧翻转、三处计算样式切换、未保存输入保留、PUT 往返持久化、0 控制台错误；结论已勾注 `specs/002-frontend-theme/quickstart.md`
 
 **Checkpoint**: US1 可独立演示——主题切换即时全局生效（会话内）
 

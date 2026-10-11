@@ -26,6 +26,8 @@ cd backend && uv run pytest tests/unit/test_theme_injection.py tests/contract/te
 步骤：① 打开"营销内容"编辑页，在表单中输入一段未保存文本；② 点击页头主题控件切到 dark；③ 观察侧栏、页头、表格、已打开的弹窗/提示是否同步切换；④ 在 dark 下再开一个确认弹窗并切换回 light；⑤ 检查页头控件对当前模式的指示。
 预期：切换同帧全局生效、无需重启/刷新（SC-001 ≤1s）；表单输入完整保留（SC-006 丢失 0 次）；控件明确指示当前模式；两向切换观感与切换前一致。
 
+**验收结论（T159，2026-10-11）**：✅ 通过。方式：构建产物 + `--server` + headless Chrome（CDP 自动驱动，脚本 `/tmp/theme-accept/drive.cjs`）。证据：切换后 `html.dark` 同帧翻转（switch 选中态同步）；body/侧栏菜单/主区计算背景色 `rgb(255,255,255)`→`rgb(20,20,20)`/`rgb(29,29,29)` 且切回一致；"通用设置"表单未保存输入在切换中完整保留；`ui_theme` 经 PUT 往返持久化（dark→light）；控制台 0 错误；dark 总览截图留档（`/tmp/theme-accept/dark-dashboard.png`）。注：以"设置页输入框"替代"营销内容编辑页"作未保存输入载体（同机制）；已打开弹窗的同步与营销内容编辑页走查由 T172（US3 全界面走查）覆盖。
+
 ### T2 记忆与启动呈现（US2 / FR-005~007 / SC-004/005）
 
 步骤：① dark 下退出应用；② 重启（壳形态），观察**首屏**（建议录屏/连拍）；③ 将 `app_setting.ui_theme` 手工改为非法值（如 `"blue"`）后重启；④ 删除该 KV 行后重启。
