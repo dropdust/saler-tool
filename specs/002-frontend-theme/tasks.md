@@ -78,7 +78,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 ### Tests for User Story 2 ⚠️（先写，确认失败）
 
-- [ ] T160 [P] [US2] 注入路由单测（红）：`backend/tests/unit/test_theme_injection.py`——dist fixture 下：KV=dark → `GET /` 返回 HTML 注入 `class="dark"`（与既有 class 合并且不重复）；KV=light/无行 → 原样返回；存储非法值 → 按 light 原样；响应头 `Cache-Control: no-store`；`/assets/*` 静态资源不受影响；无 dist 时 `/` 仍 404（保持既有 `test_spa_mount.py` 语义）
+- [X] T160 [P] [US2] 注入路由单测（红）：`backend/tests/unit/test_theme_injection.py`——dist fixture 下：KV=dark → `GET /` 返回 HTML 注入 `class="dark"`（与既有 class 合并且不重复）；KV=light/无行 → 原样返回；存储非法值 → 按 light 原样；响应头 `Cache-Control: no-store`；`/assets/*` 静态资源不受影响；无 dist 时 `/` 仍 404（保持既有 `test_spa_mount.py` 语义）
 - [ ] T161 [P] [US2] 启动同步单测（红）：`frontend/tests/theme-boot.test.ts`——`syncFromServer()`：服务器 dark + DOM 无类 → 加类；`userTouched=true` → 不覆盖用户刚做的切换；`GET /settings` 失败 → 静默保持现状（dev 兜底/异常校正，R4）
 - [ ] T162 [P] [US2] 集成测试（红→绿）：`backend/tests/integration/test_us3_backup_restore.py` 增补——设 `ui_theme=dark` → 生成备份 → 恢复 → `GET /settings` 得 `dark`（FR-012 随备份链保留的证据，预期零额外实现）
 
