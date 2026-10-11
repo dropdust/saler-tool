@@ -17,7 +17,17 @@
     <el-card shadow="never" class="filters">
       <el-form inline>
         <el-form-item label="搜索词">
-          <el-input v-model="filters.q" clearable style="width: 190px" @keyup.enter="load" />
+          <el-input v-model="filters.q" clearable style="width: 190px" @keyup.enter="onQuery" />
+        </el-form-item>
+        <el-form-item label="语言">
+          <el-select v-model="filters.lang" data-test="lang-filter" clearable style="width: 130px">
+            <el-option
+              v-for="item in langChoices"
+              :key="item.value"
+              :value="item.value"
+              :label="item.label"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="执行状态">
           <el-select v-model="filters.status" clearable style="width: 120px">
@@ -50,13 +60,18 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
+          <el-button type="primary" @click="onQuery">查询</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="items" @selection-change="onSelectionChange">
+      <el-table
+        v-loading="loading"
+        :data="items"
+        empty-text="没有符合当前筛选条件的种子"
+        @selection-change="onSelectionChange"
+      >
         <el-table-column type="selection" width="42" />
         <el-table-column prop="query" label="搜索词" min-width="240" show-overflow-tooltip />
         <el-table-column label="分类" min-width="190">
@@ -197,11 +212,12 @@ import type { GraphNode, Paginated, Seed } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
 import AiExpandDialog from './AiExpandDialog.vue'
-import { LANGS, PRIORITY_LABELS, SOURCE_LABELS, langLabel } from '../../constants'
+import { LANGS, PRIORITY_LABELS, SOURCE_LABELS, langFilterOptions, langLabel } from '../../constants'
 import { useAiGate } from '../../composables/useAiGate'
 
 const filters = ref({
   q: '',
+  lang: '',
   status: '',
   review_status: 'approved',
   source: '',
@@ -246,20 +262,34 @@ async function loadNodes() {
   nodes.value = result.items
 }
 
+// 语言筛选选项：标准语言全量 + 库内实际取值（随每次列表刷新同步，003 FR-001/006）
+const langValues = ref<string[]>([])
+const langChoices = computed(() => langFilterOptions(langValues.value))
+
 async function load() {
   loading.value = true
   try {
-    const result = await api.get<Paginated<Seed>>('/seeds', {
-      ...filters.value,
-      page: page.value,
-      page_size: pageSize,
-    })
+    const [result, langs] = await Promise.all([
+      api.get<Paginated<Seed>>('/seeds', {
+        ...filters.value,
+        page: page.value,
+        page_size: pageSize,
+      }),
+      api.get<string[]>('/seeds/langs'),
+    ])
     items.value = result.items
     total.value = result.total
+    langValues.value = langs
     selected.value = []
   } finally {
     loading.value = false
   }
+}
+
+// 查询动作：应用/清除筛选条件统一复位到第 1 页（FR-008 越界不空白）
+async function onQuery() {
+  page.value = 1
+  await load()
 }
 
 // ---- 新建 / 编辑 / 失效 ----
