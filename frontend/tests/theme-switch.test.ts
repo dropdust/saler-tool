@@ -55,7 +55,7 @@ describe('MainLayout 页头主题切换控件', () => {
     const control = wrapper.find('[data-test="theme-switch"]')
     expect(control.exists()).toBe(true)
     expect(wrapper.findComponent(ElSwitch).props('modelValue')).toBe(false)
-    expect(control.attributes('aria-label')).toContain('浅色')
+    expect(wrapper.find('.el-switch__input').attributes('aria-label')).toContain('浅色')
   })
 
   it('用户切换：同帧翻转全局类、控件态更新、PUT 持久化', async () => {
@@ -74,8 +74,8 @@ describe('MainLayout 页头主题切换控件', () => {
   it('dark 首帧（服务端注入）下控件初始即选中并标注深色', async () => {
     document.documentElement.classList.add('dark')
     const { wrapper } = await mountWithPinia()
-    const control = wrapper.find('[data-test="theme-switch"]')
+    expect(wrapper.find('[data-test="theme-switch"]').exists()).toBe(true)
     expect(wrapper.findComponent(ElSwitch).props('modelValue')).toBe(true)
-    expect(control.attributes('aria-label')).toContain('深色')
+    expect(wrapper.find('.el-switch__input').attributes('aria-label')).toContain('深色')
   })
 })

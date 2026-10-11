@@ -50,6 +50,14 @@
           本地服务运行中 · v{{ appStore.health.version }}
         </el-tag>
         <el-tag v-else type="danger" effect="plain">本地服务不可用</el-tag>
+        <el-switch
+          v-model="isDark"
+          data-test="theme-switch"
+          inline-prompt
+          :active-icon="Moon"
+          :inactive-icon="Sunny"
+          :aria-label="`主题切换：当前${isDark ? '深色' : '浅色'}模式`"
+        />
       </el-header>
       <el-main class="main"><router-view /></el-main>
     </el-container>
@@ -62,18 +70,28 @@ import { useRoute } from 'vue-router'
 import {
   Document,
   Message,
+  Moon,
   Odometer,
   Promotion,
   Setting,
   Share,
+  Sunny,
   User,
 } from '@element-plus/icons-vue'
 import { useAppStore } from '../stores/app'
+import { useThemeStore } from '../stores/theme'
 
 const route = useRoute()
 const appStore = useAppStore()
+const themeStore = useThemeStore()
 const activePath = computed(() => route.path)
 const pageTitle = computed(() => (route.meta.title as string) ?? '')
+const isDark = computed({
+  get: () => themeStore.current === 'dark',
+  set: (value: boolean) => {
+    if ((themeStore.current === 'dark') !== value) themeStore.toggle()
+  },
+})
 
 onMounted(() => {
   appStore.loadHealth()
