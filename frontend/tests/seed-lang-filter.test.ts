@@ -93,8 +93,9 @@ function lastSeedsParams(): Record<string, unknown> {
   return (calls[calls.length - 1]?.[1] ?? {}) as Record<string, unknown>
 }
 
-function langSelect(wrapper: VueWrapper) {
-  return wrapper.findComponent('[data-test="lang-filter"]')
+function langSelect(wrapper: VueWrapper): VueWrapper {
+  // findComponent 字符串选择器返回 WrapperLike（可能是 DOMWrapper）；此处断言为组件包装器
+  return wrapper.findComponent('[data-test="lang-filter"]') as unknown as VueWrapper
 }
 
 async function clickQuery(wrapper: VueWrapper) {
@@ -113,7 +114,8 @@ describe('SeedList 语言筛选（US1）', () => {
   it('渲染"语言"筛选控件（data-test），默认未选择', async () => {
     const wrapper = await mountList()
     expect(langSelect(wrapper).exists()).toBe(true)
-    expect(langSelect(wrapper).props('modelValue')).toBe('')
+    const props = langSelect(wrapper).props() as Record<string, unknown>
+    expect(props.modelValue).toBe('')
   })
 
   it('选项 = 标准语言全量 + 库内非标准取值（标准语言库内无种子亦在列）', async () => {
