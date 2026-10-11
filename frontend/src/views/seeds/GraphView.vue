@@ -16,10 +16,10 @@
 
     <el-card shadow="never">
       <div class="legend">
-        <span><i class="dot" style="background: #67c23a" /> 已产出联系方式</span>
-        <span><i class="dot" style="background: #e6a23c" /> 已执行·无联系方式</span>
-        <span><i class="dot" style="background: #409eff" /> 已建种子·待执行</span>
-        <span><i class="dot" style="background: #c0c4cc" /> 空白（无种子）</span>
+        <span><i class="dot dot-success" /> 已产出联系方式</span>
+        <span><i class="dot dot-warning" /> 已执行·无联系方式</span>
+        <span><i class="dot dot-primary" /> 已建种子·待执行</span>
+        <span><i class="dot dot-info" /> 空白（无种子）</span>
         <span class="tip">节点大小 = 种子数/产量；拖拽可调整布局，滚轮缩放</span>
       </div>
       <div ref="chartEl" v-loading="loading" class="chart" />
@@ -41,13 +41,17 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { api } from '../../api/client'
 import type { OverviewPayload, OverviewNode } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import { NODE_TYPE_LABELS } from '../../constants'
+import { useThemeStore } from '../../stores/theme'
+import { nodeColor, readThemePalette } from '../../theme/palette'
+
+const themeStore = useThemeStore()
 
 const STRUCTURE_TYPES = ['product_line', 'persona', 'market']
 const ENTITY_TYPES = ['org', 'market']
@@ -62,10 +66,7 @@ let chart: echarts.ECharts | null = null
 let payload: OverviewPayload = { nodes: [], edges: [] }
 
 function colorOf(node: OverviewNode): string {
-  if (node.counts.contacts > 0) return '#67c23a'
-  if (node.counts.done > 0) return '#e6a23c'
-  if (node.counts.seeds > 0) return '#409eff'
-  return '#c0c4cc'
+  return nodeColor(node.counts, readThemePalette())
 }
 
 async function load() {
@@ -98,10 +99,14 @@ function renderChart() {
 
   const categories = [...allowed].map((type) => ({ name: NODE_TYPE_LABELS[type] ?? type }))
   const categoryIndex = (type: string) => categories.findIndex((c) => c.name === (NODE_TYPE_LABELS[type] ?? type))
+  const palette = readThemePalette()
 
   chart.setOption(
     {
       tooltip: {
+        backgroundColor: palette.tooltipBg,
+        borderColor: palette.tooltipBorder,
+        textStyle: { color: palette.tooltipText },
         formatter: (params: { dataType?: string; data?: { name?: string; counts?: { seeds: number; done: number; candidates: number; contacts: number } } }) => {
           if (params.dataType === 'edge') return ''
           const counts = params.data?.counts
@@ -118,7 +123,7 @@ function renderChart() {
           layout: 'force',
           roam: true,
           draggable: true,
-          label: { show: true, position: 'right', fontSize: 11 },
+          label: { show: true, position: 'right', fontSize: 11, color: palette.textPrimary },
           force: { repulsion: 300, edgeLength: [70, 170], gravity: 0.06 },
           emphasis: { focus: 'adjacency', label: { fontSize: 13 } },
           categories,
@@ -135,7 +140,7 @@ function renderChart() {
             target: String(edge.target),
             lineStyle: {
               width: Math.min(6, 1 + edge.weight),
-              color: edge.relation_type === 'seed_cooccur' ? '#b1b3b8' : '#7a7d85',
+              color: edge.relation_type === 'seed_cooccur' ? palette.edgeSolid : palette.edgeDashed,
               type: edge.relation_type === 'seed_cooccur' ? 'solid' : 'dashed',
             },
           })),
@@ -145,6 +150,12 @@ function renderChart() {
     true,
   )
 }
+
+// 主题切换 → 整图重渲（canvas 不随 CSS 变量自动更新，R5）
+watch(
+  () => themeStore.current,
+  () => renderChart(),
+)
 
 function goSeeds(node: OverviewNode) {
   if (node.node_type === 'market') {
@@ -190,6 +201,19 @@ onBeforeUnmount(() => {
   height: 10px;
   border-radius: 50%;
   margin-right: 4px;
+}
+/* 图例语义色：随主题变量切换（FR-008；禁止硬编码） */
+.dot-success {
+  background: var(--el-color-success);
+}
+.dot-warning {
+  background: var(--el-color-warning);
+}
+.dot-primary {
+  background: var(--el-color-primary);
+}
+.dot-info {
+  background: var(--el-color-info);
 }
 .tip {
   margin-left: auto;
