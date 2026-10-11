@@ -31,7 +31,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 **Purpose**: 基线核对与暗色主题基座引入
 
-- [ ] T151 基线绿灯核对（现有套件 `backend/tests/`、`frontend/tests/`）：`cd backend && uv run pytest -q`、`cd frontend && pnpm test && pnpm build` 全部通过，作为后续 TDD 红→绿对照基线（不产生文件变更；结论记入本任务提交信息）
+- [X] T151 基线绿灯核对（现有套件 `backend/tests/`、`frontend/tests/`）：`cd backend && uv run pytest -q`（200 passed）、`cd frontend && pnpm test && pnpm build`（vitest 1 passed / build OK）全部通过，作为后续 TDD 红→绿对照基线（不产生文件变更；结论记入本任务提交信息）
 - [ ] T152 [P] 前端接入 EP 暗色变量与主题基座：新建 `frontend/src/styles/theme.css`（`html,body` 基底 `--el-bg-color`/`--el-text-color-primary`、`color-scheme` 亮/暗双态、图表主题变量 `--chart-edge-solid`/`--chart-edge-dashed` 亮/暗双套、预览保真基底变量 `--preview-surface-bg/fg/border` 两主题同值）；`frontend/src/main.ts` 增加 `element-plus/theme-chalk/dark/css-vars.css` 与 `styles/theme.css` 引入（零新增依赖，见 plan.md Technical Context）
 
 ---
