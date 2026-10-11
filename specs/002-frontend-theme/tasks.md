@@ -109,7 +109,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 - [X] T169 [US3] GraphView 主题化落地：`frontend/src/views/seeds/GraphView.vue`——`colorOf` → palette；边线 `--chart-edge-solid/dashed`；label/tooltip 主题色；图例圆点硬编码色改 CSS 变量；`watch(themeStore.current)` 复用 `renderChart()` 重渲 → T167 转绿（FR-008）
 - [X] T170 [US3] 内容保真：`frontend/src/views/content/VariantEditor.vue`——预览区 `.preview-body`/`.preview-subject` 改用 `--preview-surface-*` 保真基底（两主题同值：白底深字固定边框），`html.dark` 下不反色（FR-010）
 - [X] T171 [US3] 硬编码颜色清零核查：`frontend/src/` 全仓 grep——组件样式 0 处残留；唯一豁免为 `src/theme/palette.ts` 的亮色兜底常量（变量缺失时防御，注释已注明）（FR-008；与 contracts/theme-contract.md §3"禁止硬编码颜色"一致）
-- [ ] T172 [US3] 双主题全界面走查（quickstart T3+T4）：按固定清单逐页勾选（含 DevTools 对比度抽查 ≥4.5:1、图谱 dark 可读、预览保真、素材图片不反色）；缺陷即时修复（修复任务补记于本文件）；结论勾注 `specs/002-frontend-theme/quickstart.md`
+- [X] T172 [US3] 双主题全界面走查（quickstart T3+T4）：21 页 × 2 主题自动化走查（CDP，1360×900）——dark 0 错误/0 对比度失败（正文口径）/0 浅色孤块；light 失败项均为 001 既有 EP 强调/次要色（0 回归）；5 模板预览保真一致；缺陷 0，结论已勾注 `specs/002-frontend-theme/quickstart.md`
 
 **Checkpoint**: 三故事全部独立可用——主题特性完整交付
 
