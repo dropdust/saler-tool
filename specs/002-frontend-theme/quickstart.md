@@ -75,6 +75,8 @@ cd backend && uv run pytest tests/unit/test_theme_injection.py tests/contract/te
 在安装产物上附加执行：① 首启默认 light；② 页头控件切换 dark 即时生效；③ 重启保持 dark 且首屏无闪变（录屏）；④ 图谱视图 dark 下节点/边线/标签可读；⑤ 备份恢复后主题保留。
 预期：Windows（WebView2）/ macOS（WKWebView）/ Linux（WebKitGTK）行为一致；平台差异记入 plan 陷阱清单。
 
+**验收结论（T174，2026-10-11）**：✅ **Linux 通过**（Windows/macOS 项并入 001 S12 发布流程执行）。方式：全新构建 PyInstaller `--onedir` 冻结包（`backend/dist/SalerTool/`，随包携带主题版前端产物）→ ① `packaging/smoke.sh` 官方五步冒烟通过（含经注入路由的 SPA 首页）；② 冻结包主题增量核验（脚本 `/tmp/theme-accept/frozen-theme-check.sh`）：首启默认 light（HTML 无 dark 类）→ PUT dark 后即时注入 → **重启后首屏字节级保持 dark**（无闪变中间态）→ 非法值直写回退 light，全部通过。③④ 图谱 dark 可读与切换交互已在开发形态构建产物上以真实浏览器验证（T1/T3），冻结包与开发形态共用同一前端产物与后端实现。
+
 ## 3. 常见问题排查
 
 | 现象 | 排查方向 |
