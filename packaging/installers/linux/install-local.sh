@@ -46,5 +46,5 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$APPS"
 
 echo "✅ 已安装到应用菜单：搜索「销售获客工具」即可点开"
 echo "   可执行文件：$DEST/SalerTool/SalerTool（也可直接双击）"
-echo "   数据目录：~/.local/share/Saler（设置的「通用设置」可迁移）"
+echo "   数据目录：~/.local/share/saler-tool（设置的「通用设置」可迁移）"
 echo "   卸载：rm -rf $DEST $APPS/saler-tool.desktop"
