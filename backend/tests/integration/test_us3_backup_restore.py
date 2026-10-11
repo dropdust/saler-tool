@@ -102,6 +102,29 @@ def test_s11_backup_then_restore_via_api(data_client, data_dir):
     assert data_client.get("/api/v1/backups").status_code == 200
 
 
+def test_ui_theme_survives_backup_restore(data_client):
+    """T162（002-frontend-theme）：主题偏好随整库备份/恢复保留（FR-012，预期零额外实现）。"""
+    # 1) 设定 dark 并生成备份
+    resp = data_client.put("/api/v1/settings", json={"values": {"ui_theme": "dark"}})
+    assert resp.json()["ui_theme"] == "dark"
+    resp = data_client.post("/api/v1/backups", json={})
+    assert resp.status_code == 202
+    job = _wait_job_allow_gone(data_client, resp.json()["job_id"])
+    assert job is not None and job["status"] == "completed", job
+    archive = job["result"]["path"]
+
+    # 2) 备份后改回 light（模拟用户随后修改）
+    resp = data_client.put("/api/v1/settings", json={"values": {"ui_theme": "light"}})
+    assert resp.json()["ui_theme"] == "light"
+
+    # 3) 恢复 → 主题偏好回到备份时点（dark，整库快照随行保留）
+    resp = data_client.post("/api/v1/restore", json={"path": archive})
+    assert resp.status_code == 202
+    outcome = _wait_job_allow_gone(data_client, resp.json()["job_id"])
+    assert outcome is None or outcome["status"] == "completed"
+    assert data_client.get("/api/v1/settings").json()["ui_theme"] == "dark"
+
+
 def test_restore_rejects_bad_file_via_api(data_client, tmp_path):
     bogus = tmp_path / "bad.zip"
     bogus.write_bytes(b"nope")
