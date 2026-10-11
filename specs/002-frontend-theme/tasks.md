@@ -32,7 +32,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 **Purpose**: 基线核对与暗色主题基座引入
 
 - [X] T151 基线绿灯核对（现有套件 `backend/tests/`、`frontend/tests/`）：`cd backend && uv run pytest -q`（200 passed）、`cd frontend && pnpm test && pnpm build`（vitest 1 passed / build OK）全部通过，作为后续 TDD 红→绿对照基线（不产生文件变更；结论记入本任务提交信息）
-- [ ] T152 [P] 前端接入 EP 暗色变量与主题基座：新建 `frontend/src/styles/theme.css`（`html,body` 基底 `--el-bg-color`/`--el-text-color-primary`、`color-scheme` 亮/暗双态、图表主题变量 `--chart-edge-solid`/`--chart-edge-dashed` 亮/暗双套、预览保真基底变量 `--preview-surface-bg/fg/border` 两主题同值）；`frontend/src/main.ts` 增加 `element-plus/theme-chalk/dark/css-vars.css` 与 `styles/theme.css` 引入（零新增依赖，见 plan.md Technical Context）
+- [X] T152 [P] 前端接入 EP 暗色变量与主题基座：新建 `frontend/src/styles/theme.css`（`html,body` 基底 `--el-bg-color`/`--el-text-color-primary`、`color-scheme` 亮/暗双态、图表主题变量 `--chart-edge-solid`/`--chart-edge-dashed` 亮/暗双套、预览保真基底变量 `--preview-surface-bg/fg/border` 两主题同值）；`frontend/src/main.ts` 增加 `element-plus/theme-chalk/dark/css-vars.css` 与 `styles/theme.css` 引入（零新增依赖，见 plan.md Technical Context）
 
 ---
 
@@ -63,7 +63,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 ### Implementation for User Story 1
 
-- [ ] T158 [US1] 页头切换控件：`frontend/src/layouts/MainLayout.vue`——页头（健康标签旁）新增 `el-switch` 内联 ☀️/🌙 图标主题切换，绑定 `stores/theme.ts`；切换同帧生效、不刷新页面、不触碰表单状态（FR-001~004）
+- [X] T158 [US1] 页头切换控件：`frontend/src/layouts/MainLayout.vue`——页头（健康标签旁）新增 `el-switch` 内联 ☀️/🌙 图标主题切换，绑定 `stores/theme.ts`；切换同帧生效、不刷新页面、不触碰表单状态（FR-001~004）
 - [X] T159 [US1] 交互验收（quickstart T1）：headless Chrome（CDP）自动驱动构建产物——class 同帧翻转、三处计算样式切换、未保存输入保留、PUT 往返持久化、0 控制台错误；结论已勾注 `specs/002-frontend-theme/quickstart.md`
 
 **Checkpoint**: US1 可独立演示——主题切换即时全局生效（会话内）
