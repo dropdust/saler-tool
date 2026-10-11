@@ -53,5 +53,21 @@ export const useThemeStore = defineStore('theme', {
         // 保留会话内已应用主题，不回滚（FR-003 即时性优先）
       }
     },
+    /**
+     * 启动校正：dev 无注入 / 注入降级 / 极端恢复场景下与设置对齐。
+     * userTouched 守卫：不覆盖用户刚做的切换（R4 竞态防护）；失败静默保持现状。
+     */
+    async syncFromServer(): Promise<void> {
+      try {
+        const settings = await api.get<Record<string, unknown>>('/settings')
+        const server = normalizeTheme(settings?.ui_theme)
+        if (!this.userTouched && server !== this.current) {
+          this.current = server
+          applyTheme(server)
+        }
+      } catch {
+        // 静默保持现状，不阻断使用
+      }
+    },
   },
 })
