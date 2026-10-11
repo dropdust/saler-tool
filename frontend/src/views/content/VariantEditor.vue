@@ -345,6 +345,8 @@ onMounted(async () => {
 .preview-subject {
   font-weight: 600;
   margin-bottom: 8px;
+  /* 内容保真（FR-010）：预览 = 收件人视角，两主题同值，不随 html.dark 反色 */
+  color: var(--preview-surface-fg);
 }
 .preview-subject .label {
   color: var(--el-text-color-secondary);
@@ -353,7 +355,10 @@ onMounted(async () => {
 .preview-body {
   white-space: pre-wrap;
   word-break: break-word;
-  background: var(--el-fill-color-light);
+  /* 内容保真（FR-010）：固定浅色基底（白底深字 + 固定边框），代表收件人实际看到的渲染 */
+  background: var(--preview-surface-bg);
+  color: var(--preview-surface-fg);
+  border: 1px solid var(--preview-surface-border);
   border-radius: 6px;
   padding: 12px;
   margin: 0 0 12px;
