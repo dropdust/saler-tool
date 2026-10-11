@@ -124,6 +124,15 @@ def list_seeds(
     return query.order_by(*order)
 
 
+def distinct_langs(db: Session) -> list[str]:
+    """库内 seed.lang 去重精确值（升序）——语言筛选选项的库内取值源（003 FR-001/006）。
+
+    按存库原值返回（不做大小写折叠/去空白）：`EN` 与 `en` 是独立取值，与列表的精确匹配语义配对。
+    """
+    rows = db.query(Seed.lang).distinct().all()
+    return sorted({row[0] for row in rows if row[0]})
+
+
 def update_seed(db: Session, seed_id: int, **fields: Any) -> Seed:
     seed = get_seed(db, seed_id)
     allowed = {

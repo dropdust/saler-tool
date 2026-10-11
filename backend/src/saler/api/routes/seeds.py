@@ -134,6 +134,12 @@ def stats(group_by: str = "batch", db: Session = Depends(get_session)) -> list[d
     return seed_service.stats(db, group_by=group_by)
 
 
+@router.get("/langs")
+def seed_langs(db: Session = Depends(get_session)) -> list[str]:
+    """语言筛选选项数据源（003）：库内去重精确取值（升序，含非标准代码）。声明须先于 /{seed_id}。"""
+    return seed_service.distinct_langs(db)
+
+
 @router.post("", status_code=201)
 def create_seed(payload: SeedCreate, db: Session = Depends(get_session)) -> dict:
     return seed_to_dict(seed_service.create_seed(db, **payload.model_dump()))
