@@ -44,7 +44,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 - [X] T153 [P] 契约测试（红）：`backend/tests/contract/test_settings_api.py`——`ui_theme` 无行时 GET 返回默认 `"light"`；PUT 写入往返；非法值（`"blue"`/`123`/`null`）→ 400 `{code:"bad_request", message:"ui_theme 仅支持 light/dark"}` 且不写库；存储侧非法值读取归一为 `"light"`（contracts/theme-contract.md §1）
 - [X] T154 实现：`backend/src/saler/services/settings_service.py`（`DEFAULTS` + `"ui_theme": "light"`；值域校验钩子 `validate_value`）+ `backend/src/saler/api/routes/settings.py`（PUT 接线校验、GET 读取归一）→ T153 转绿
-- [ ] T155 [P] 单元测试（红）：`frontend/tests/theme-store.test.ts`——`toggle()` 同帧翻转 `document.documentElement` 的 `dark` 类并以 `{values:{ui_theme}}` 调用 `PUT /settings`；PUT 失败保留会话内主题并提示、不回滚；`normalizeTheme` 非 `"dark"` 一律归 `"light"`；`current` 初值从 DOM 读取（data-model.md 状态机）
+- [X] T155 [P] 单元测试（红）：`frontend/tests/theme-store.test.ts`——`toggle()` 同帧翻转 `document.documentElement` 的 `dark` 类并以 `{values:{ui_theme}}` 调用 `PUT /settings`；PUT 失败保留会话内主题并提示、不回滚；`normalizeTheme` 非 `"dark"` 一律归 `"light"`；`current` 初值从 DOM 读取（data-model.md 状态机）
 - [ ] T156 实现：`frontend/src/stores/theme.ts`（`current`/`toggle()`/`normalizeTheme`；唯一 DOM 类操作者，视图禁止直接操作）→ T155 转绿
 
 **Checkpoint**: 地基就绪——KV 键与主题 store 可用；用户故事可开始
