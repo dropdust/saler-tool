@@ -32,6 +32,9 @@ def put_settings(payload: SettingsUpdate, db: Session = Depends(get_session)) ->
     for key, value in payload.values.items():
         if not settings_service.is_known_key(db, key):
             raise bad_request(f"未知设置项：{key}")
+        message = settings_service.value_error(key, value)
+        if message is not None:
+            raise bad_request(message)
         settings_service.set_value(db, key, value)
     return settings_service.get_all(db)
 
