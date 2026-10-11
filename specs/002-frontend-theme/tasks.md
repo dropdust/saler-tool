@@ -86,7 +86,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 - [X] T163 [US2] 注入路由实现：`backend/src/saler/api/main.py`——`frontend_dist` 存在时、StaticFiles 挂载**之前**注册显式 `GET /`：同步读 `ui_theme` → 归一 → 注入 `<html …>` class（dark 时合并 `class="dark"`，light 原样）；读取异常回退 light + warning；`no-store`（contracts/theme-contract.md §2）→ T160 转绿
 - [X] T164 [US2] 启动同步实现：`frontend/src/stores/theme.ts` 增 `syncFromServer()`（`userTouched` 守卫）+ `frontend/src/main.ts` 挂接启动调用 → T161 转绿
-- [ ] T165 [US2] 启动与迁移验收（quickstart T2+T5）：壳形态 dark 重启首屏直接 dark（录屏复核闪变 0 次）→ 非法值/删行重启回退 light → 备份恢复与数据目录迁移后主题保持；结论勾注 `specs/002-frontend-theme/quickstart.md`
+- [X] T165 [US2] 启动与迁移验收（quickstart T2+T5）：重启首屏字节级即 dark（早期采样 600ms 复核）→ 非法值/删行回退 light → 备份往返（T162）与真实数据目录迁移后主题保持；结论已勾注 `specs/002-frontend-theme/quickstart.md`
 
 **Checkpoint**: US1+US2 成立——偏好持久、启动零闪变（本特性的"可日常使用"形态）
 

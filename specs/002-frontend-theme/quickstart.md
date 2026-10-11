@@ -33,6 +33,8 @@ cd backend && uv run pytest tests/unit/test_theme_injection.py tests/contract/te
 步骤：① dark 下退出应用；② 重启（壳形态），观察**首屏**（建议录屏/连拍）；③ 将 `app_setting.ui_theme` 手工改为非法值（如 `"blue"`）后重启；④ 删除该 KV 行后重启。
 预期：② 首屏直接 dark，录屏复核**可感知闪变 0 次**（SC-005）；③ 非法值回退 light 且正常启动；④ 无偏好时默认 light（SC-004）。
 
+**验收结论（T165，2026-10-11）**：✅ 通过。方式：构建产物 + `--server` + 真实进程重启 + headless Chrome。证据（SC-005 以更强的字节级证据替代录屏）：重启后 `GET /` 响应体即含 `<html lang="zh-CN" class="dark">`——首帧主题在 HTML 字节中确定、无 JS 参与，不存在错误主题的任何中间态；浏览器侧 600ms 早期采样与稳定后 `documentElement.className` 均为 `dark`、页头开关选中、`aria-label=主题切换：当前深色模式`；首屏截图留档（`/tmp/theme-accept/restart-dark-firstscreen.png`）。③ 直写非法值 `"blue"`：注入与 `GET /settings` 均归一 `light`；④ 删除 KV 行：默认 `light` 正常启动（SC-004；另见后端单测 `test_theme_injection.py`）。
+
 ### T3 全界面双主题走查（US3 / FR-008/009 / SC-002/003）
 
 以固定清单逐页在 dark 与 light 下走查并勾选（建议截屏留档，缺陷数须为 0，SC-002）：
@@ -57,6 +59,8 @@ cd backend && uv run pytest tests/unit/test_theme_injection.py tests/contract/te
 
 步骤：① dark 下生成备份（设置 → 备份与数据）；② 在清空后的环境恢复该备份并重启；③ 另测：数据目录迁移完成后重启。
 预期：恢复/迁移后主题偏好为 dark 并首屏生效；无偏好数据的环境回退 light。
+
+**验收结论（T165，2026-10-11）**：✅ 通过。备份往返：集成测试 `test_us3_backup_restore.py::test_ui_theme_survives_backup_restore`（T162）——dark → 备份 → 改为 light → 恢复 → 回到备份时点 dark。迁移：真实执行 `POST /settings/data-dir/move` 迁移至新目录（job completed）→ 以新目录重启 → 首屏 `class="dark"` 保留。无偏好环境回退 light 见 T2③④。
 
 ### T6 冻结包冒烟增量（三平台，附加于 001 S1/S6/S10 冒烟）
 
