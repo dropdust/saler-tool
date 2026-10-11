@@ -101,7 +101,7 @@ description: "Task list for 种子列表语言筛选"
 
 ### Implementation for User Story 3
 
-- [ ] T190 [US3] 全覆盖验收（quickstart L3）：真实运行——csv 批量导入含 `ko`/`EN` 的种子 → 打开语言筛选确认选项原样可见 → 分别选择 `ko`/`EN`/`en` 筛出对应且仅对应种子（SC-003 死角 0、无大小写漏筛）；结论勾注 quickstart
+- [X] T190 [US3] 全覆盖验收（quickstart L3）：真实运行（CDP 驱动）——导入 2 条 `ko` + 3 条 `EN` → 选项 19 项含原样变体 → `ko`/`EN`/`en` 分别筛出 2/3/4 条互不混淆（SC-003 死角 0）；7 项全过、0 控制台错误，结论已勾注 quickstart
 
 **Checkpoint**: 三故事全部独立可用——语言筛选特性完整交付
 
