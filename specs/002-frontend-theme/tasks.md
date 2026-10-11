@@ -59,7 +59,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 ### Tests for User Story 1 ⚠️（先写，确认失败）
 
-- [ ] T157 [P] [US1] 组件测试（红）：`frontend/tests/theme-switch.test.ts`——MainLayout 页头渲染主题切换控件（含中文 aria-label）；交互调用 `themeStore.toggle()`；控件当前态指示（图标/选中态）随 `theme.current` 变化
+- [X] T157 [P] [US1] 组件测试（红）：`frontend/tests/theme-switch.test.ts`——MainLayout 页头渲染主题切换控件（含中文 aria-label）；交互调用 `themeStore.toggle()`；控件当前态指示（图标/选中态）随 `theme.current` 变化
 
 ### Implementation for User Story 1
 
