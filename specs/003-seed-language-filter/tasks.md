@@ -64,7 +64,7 @@ description: "Task list for 种子列表语言筛选"
 ### Implementation for User Story 1
 
 - [X] T184 [US1] 筛选控件实现：`frontend/src/views/seeds/SeedList.vue`——筛选栏新增语言 `el-select`（clearable、`data-test="lang-filter"`、与其他筛选项同排）；`filters.lang` 默认 `''`（空值不经 `buildQuery` 发起参数）；`load()` 内并行拉取 `/seeds/langs` 并经 `langFilterOptions` 组装选项（随每次刷新同步，FR-006）；新增 `onQuery()`（查询按钮与搜索词回车触发）→ `page=1` 后加载；表格 `empty-text="没有符合当前筛选条件的种子"`；既有 market_id 路由带入与其余筛选保持不变 → T183 转绿（FR-001~008；vitest 29 通过 + lint clean）
-- [ ] T185 [US1] 交互验收（quickstart L1+L4）：真实运行（构建产物或 dev + 真实后端，可用 headless Chrome/CDP 自动驱动）——多语言数据下 ru 筛选、组合条件交集、清除恢复核对；空语言空态；第 2 页改选不足一页语言 → 呈现第 1 页有效结果；逐项通过后将结论勾注 `specs/003-seed-language-filter/quickstart.md`
+- [X] T185 [US1] 交互验收（quickstart L1+L4）：真实运行（构建产物 + `--server` + headless Chrome/CDP）——多语言数据下 ru 筛选（60 条零混杂）、组合交集（搜索词/审核）、清除恢复（一步 69 条）；空语言空态（fa→明确文案）；第 2 页改选不足一页语言 → 复位第 1 页有效结果；9 项全过、控制台 0 错误，结论已勾注 `specs/003-seed-language-filter/quickstart.md`
 
 **Checkpoint**: US1 可独立演示——语言筛选可用（MVP）
 
