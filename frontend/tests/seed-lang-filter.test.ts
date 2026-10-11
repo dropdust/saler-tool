@@ -214,4 +214,22 @@ describe('SeedList 语言筛选（US1）', () => {
     expect(mockedApi.del).toHaveBeenCalledWith('/seeds/1')
     expect(lastSeedsParams().lang).toBe('ru')
   })
+
+  it('库内大小写变体/非标准代码：原样选项且精确请求（EN 与 en 独立，US3/FR-006）', async () => {
+    stubApi({ '/seeds/langs': ['EN', 'en', 'ko', 'ru'] })
+    const wrapper = await mountList()
+    const options = langSelect(wrapper).findAllComponents(ElOption)
+    const byValue = new Map(options.map((option) => [option.props('value'), option.props('label')]))
+    expect(byValue.get('EN')).toBe('EN') // 非标准写法原样显示
+    expect(byValue.get('ko')).toBe('ko')
+    expect(byValue.get('en')).toBe('英语（en）') // 标准码保留统一标签
+    expect(options.filter((option) => option.props('value') === 'en')).toHaveLength(1)
+    expect(options.filter((option) => option.props('value') === 'EN')).toHaveLength(1)
+
+    langSelect(wrapper).vm.$emit('update:modelValue', 'EN')
+    await nextTick()
+    await clickQuery(wrapper)
+    await flushPromises()
+    expect(lastSeedsParams().lang).toBe('EN') // 精确匹配：不会落到 en
+  })
 })

@@ -97,7 +97,7 @@ description: "Task list for 种子列表语言筛选"
 ### Tests for User Story 3 ⚠️
 
 - [X] T188 [P] [US3] 契约测试增补（**书写即绿——T179 按原值返回即满足**）：`backend/tests/contract/test_seeds_api.py`——`/seeds/langs`：非标准代码（`ko`）原样返回；大小写变体 `EN` 与 `en` 并存（不折叠、不归并）；新写入（`POST /seeds`）的取值即时出现在返回值（覆盖性）——2 项书写即绿（契约 23 全过）
-- [ ] T189 [P] [US3] 组件测试增补（**书写即绿——T181/T184 即满足，若红则修复实现**）：`frontend/tests/seed-lang-filter.test.ts`——mock `/seeds/langs` 返回 `['EN','en','ko','ru']`：选项中 `EN`、`ko` 原样渲染（不与标准标签混淆）；选择 `EN` → 请求 `lang:'EN'`（精确）；`EN` 与 `en` 为两个独立选项、各自可筛
+- [X] T189 [P] [US3] 组件测试增补（**书写即绿——T181/T184 即满足**）：`frontend/tests/seed-lang-filter.test.ts`——mock `/seeds/langs` 返回 `['EN','en','ko','ru']`：选项中 `EN`、`ko` 原样渲染（不与标准标签混淆）；选择 `EN` → 请求 `lang:'EN'`（精确）；`EN` 与 `en` 为两个独立选项、各自可筛——1 项书写即绿（vitest 32 通过 + lint clean）
 
 ### Implementation for User Story 3
 
