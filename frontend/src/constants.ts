@@ -25,6 +25,22 @@ export function langLabel(code: string | null | undefined): string {
   return LANGS.find((item) => item.code === code)?.label ?? code
 }
 
+/**
+ * 语言筛选选项（003）：统一语言表全量（固定顺序、"中文标签（code）"）＋ 库内非标准精确取值
+ * （原样 code、按传入顺序追加、去重）。存库原值即选项值——`EN` 与 `en` 为两个独立选项（精确匹配语义）。
+ */
+export function langFilterOptions(present: string[]): Array<{ value: string; label: string }> {
+  const known = LANGS.map((item) => ({ value: item.code, label: `${item.label}（${item.code}）` }))
+  const seen = new Set(known.map((item) => item.value))
+  const extras: Array<{ value: string; label: string }> = []
+  for (const code of present) {
+    if (seen.has(code)) continue
+    seen.add(code)
+    extras.push({ value: code, label: code })
+  }
+  return [...known, ...extras]
+}
+
 export const NODE_TYPE_LABELS: Record<string, string> = {
   product_line: '产品线',
   persona: '客户角色',
