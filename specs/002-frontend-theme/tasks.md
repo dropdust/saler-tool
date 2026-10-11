@@ -122,6 +122,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 - [X] T173 [P] 契约与文档同步：`specs/001-sales-tool/contracts/local-api.md` settings 行补记 `ui_theme` 键与值域；`specs/001-sales-tool/quickstart.md` S1 增补"首启默认 light + 页头切换可达"断言（宪法"契约变更必须同步"）
 - [X] T174 [P] 冻结包冒烟增量（quickstart T6）：本机 Linux——全新 PyInstaller 冻结包 + 官方 smoke.sh 通过 + 主题增量核验（首启 light/PUT 即注入/重启保持/非法回退）通过；Windows/macOS 项并入 001 S12 发布流程执行
 - [X] T175 回归与一致性：全量测试绿（后端 210 / 前端 vitest 20 / build+lint 通过）；`/speckit-analyze` 一致性审查——0 CRITICAL、覆盖 20/20=100%、无重复与宪法冲突；A1（FR-009 判定口径）/A2（SC-005 验证方法）已处置（spec Clarifications 注记），A3/A4 记录无需任务调整
+- [X] T176 应用图标（用户请求，2026-10-11 追加）：`chanzi.png` 接入——桌面壳窗口图标（`_icon_path()` + `webview.start(icon=)`，GTK）、安装器图标（`packaging/installers/linux/saler.png` 256×256）、冻结包随包（saler.spec datas）、浏览器 favicon（`frontend/public/chanzi.png`）；测试 `backend/tests/unit/test_desktop_icon.py`
 
 ---
 

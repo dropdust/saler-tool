@@ -61,6 +61,8 @@ a = Analysis(
     datas=[
         # 前端构建产物（先执行 pnpm build）
         (os.path.join(ROOT, "frontend", "dist"), "frontend/dist"),
+        # 窗口图标（T176：chanzi.png；desktop/app.py::_icon_path 冻结态从 _MEIPASS/packaging 读取）
+        (os.path.join(ROOT, "packaging", "icon.png"), "packaging"),
         # 迁移脚本随包分发（冻结启动时对数据目录执行 alembic upgrade）
         (os.path.join(BACKEND, "alembic"), "alembic"),
         (os.path.join(BACKEND, "alembic.ini"), "."),

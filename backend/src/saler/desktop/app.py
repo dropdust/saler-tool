@@ -28,6 +28,22 @@ def _frontend_dist() -> Path:
     return Path(__file__).resolve().parents[3].parent / "frontend" / "dist"
 
 
+def _icon_path() -> str | None:
+    """窗口图标（chanzi.png，T176）；缺失时返回 None——不阻断启动。
+
+    pywebview 的 icon 参数仅 GTK/QT 有效（Linux 命中）；Windows/macOS 的
+    窗口图标由各自壳/打包流程处理（见 packaging/README）。
+    """
+    import sys
+
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidate = Path(sys._MEIPASS) / "packaging" / "icon.png"
+    else:
+        # 开发态：backend/src/saler/desktop/app.py → <repo>/packaging/icon.png
+        candidate = Path(__file__).resolve().parents[3].parent / "packaging" / "icon.png"
+    return str(candidate) if candidate.is_file() else None
+
+
 class ServerThread(threading.Thread):
     """在后台线程运行 uvicorn（端口 0 = 系统分配）。"""
 
@@ -151,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
     webview.create_window(WINDOW_TITLE, url, width=1360, height=900, min_size=(1024, 700))
     try:
-        webview.start()
+        webview.start(icon=_icon_path())
     except Exception as exc:  # noqa: BLE001 —— WebView 运行时缺失等给出可操作提示（T134）
         logger.exception("桌面窗口启动失败")
         _report_fatal(friendly_startup_error(exc))
