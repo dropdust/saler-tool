@@ -41,7 +41,7 @@ description: "Task list for 种子列表语言筛选"
 
 **⚠️ CRITICAL**: 本阶段完成前，任何用户故事不得开始
 
-- [ ] T178 [P] 契约测试（红）：`backend/tests/contract/test_seeds_api.py` 新增 `TestSeedLangsEndpoint`——`GET /api/v1/seeds/langs`：库内 `seed.lang` 去重**精确值**、升序返回（字符串数组）；空库返回 `[]`（contracts/seed-lang-filter-contract.md §2）
+- [X] T178 [P] 契约测试（红）：`backend/tests/contract/test_seeds_api.py` 新增 `TestSeedLangsEndpoint`——`GET /api/v1/seeds/langs`：库内 `seed.lang` 去重**精确值**、升序返回（字符串数组）；空库返回 `[]`（contracts/seed-lang-filter-contract.md §2）——2 项确认失败（路径被 `/{seed_id}` 吞掉）
 - [ ] T179 实现：`backend/src/saler/core/seeds/service.py` 增 `distinct_langs(db)`（`SELECT DISTINCT seed.lang`，滤空值，升序）+ `backend/src/saler/api/routes/seeds.py` 增 `GET /seeds/langs`（**声明于 `/{seed_id}` 之前**，纯读、无参数）→ T178 转绿
 - [ ] T180 [P] 纯函数单测（红）：`frontend/tests/seed-lang-options.test.ts`——`langFilterOptions(present)`：`LANGS` 全部 17 语言在列且顺序一致、标签为 `中文标签（code）`（如"俄语（ru）"）；不在 `LANGS` 的取值按传入顺序原样追加、标签=code；重复值去重；`present` 含标准码时不重复出现（research R4 / data-model.md 选项集合规则："选项值 = 存库原值；`EN` 与 `en` 为两个独立选项，互不混淆"）
 - [ ] T181 实现：`frontend/src/constants.ts` 增 `langFilterOptions(present: string[]): Array<{ value: string; label: string }>`（与 `LANGS`/`langLabel` 同族）→ T180 转绿

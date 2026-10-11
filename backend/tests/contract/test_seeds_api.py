@@ -181,3 +181,16 @@ class TestSeeds:
         resp = client.post("/api/v1/seeds/ingest", json={"content": line})
         job = wait_job(client, resp.json()["job_id"])
         assert job["result"]["unmatched_queries"] == ["no such seed"]
+
+
+class TestSeedLangsEndpoint:
+    """T178 契约测试：GET /seeds/langs——库内语言取值（筛选选项全覆盖的数据源，FR-001/006）。"""
+
+    def test_empty_library_returns_empty_list(self, client):
+        assert client.get("/api/v1/seeds/langs").json() == []
+
+    def test_distinct_sorted_exact_values(self, client):
+        for query, lang in [("q-en", "en"), ("q-ru-1", "ru"), ("q-ru-2", "ru"), ("q-zh", "zh")]:
+            resp = client.post("/api/v1/seeds", json={"query": query, "lang": lang})
+            assert resp.status_code == 201, resp.text
+        assert client.get("/api/v1/seeds/langs").json() == ["en", "ru", "zh"]
