@@ -105,7 +105,7 @@ description: "Task list for 应用前端主题（浅色 / 深色）"
 
 ### Implementation for User Story 3
 
-- [ ] T168 [US3] palette 实现：`frontend/src/theme/palette.ts`（`readThemePalette()` 经 `getComputedStyle(document.documentElement)` 读 EP 变量；节点色映射纯函数）→ T166 转绿
+- [X] T168 [US3] palette 实现：`frontend/src/theme/palette.ts`（`readThemePalette()` 经 `getComputedStyle(document.documentElement)` 读 EP 变量；节点色映射纯函数）→ T166 转绿
 - [ ] T169 [US3] GraphView 主题化落地：`frontend/src/views/seeds/GraphView.vue`——`colorOf` → palette；边线 `--chart-edge-solid/dashed`；label/tooltip 主题色；图例圆点硬编码色改 CSS 变量；`watch(themeStore.current)` 复用 `renderChart()` 重渲 → T167 转绿（FR-008）
 - [ ] T170 [US3] 内容保真：`frontend/src/views/content/VariantEditor.vue`——预览区 `.preview-body`/`.preview-subject` 改用 `--preview-surface-*` 保真基底（两主题同值：白底深字固定边框），`html.dark` 下不反色（FR-010）
 - [ ] T171 [US3] 硬编码颜色清零核查：`frontend/src/` 全仓 grep（颜色声明含 `#hex|white|black` 且不含 `var(--el`）——除保真基底豁免外应为 0，修复遗漏（FR-008；与 contracts/theme-contract.md §3"禁止硬编码颜色"一致）
