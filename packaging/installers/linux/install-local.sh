@@ -43,6 +43,10 @@ StartupWMClass=SalerTool
 EOF
 
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
+# 图标缓存刷新（-t：用户 hicolor 无 index.theme 也兼容；帮助各桌面环境重读新建图标）
+if [ -n "$ICON_LINE" ] && command -v gtk-update-icon-cache >/dev/null; then
+  gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+fi
 
 echo "✅ 已安装到应用菜单：搜索「销售获客工具」即可点开"
 echo "   可执行文件：$DEST/SalerTool/SalerTool（也可直接双击）"
