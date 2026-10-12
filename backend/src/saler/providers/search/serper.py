@@ -87,5 +87,13 @@ MANIFEST = ProviderManifest(
     },
     secret_fields=("api_key",),
     factory=SerperSearchProvider,
+    preset={
+        "endpoint": DEFAULT_BASE,
+        "note": "注册赠 2,500 次（一次性，非每月）；注册免绑卡、接入最简",
+        "apply_url": "https://serper.dev/dashboard",
+        "access_mode": "official_api",
+        "market": "全球（Google SERP 转售）",
+        "risk": "预付按量计费；转售数据的存储/再分发限制见其条款",
+    },
 )
 registry.register(MANIFEST)

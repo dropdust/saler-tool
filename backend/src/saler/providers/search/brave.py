@@ -88,5 +88,13 @@ MANIFEST = ProviderManifest(
     },
     secret_fields=("api_key",),
     factory=BraveSearchProvider,
+    preset={
+        "endpoint": DEFAULT_BASE,
+        "note": "计量制约 $5/千次；每月 $5 免费信用（需绑卡）",
+        "apply_url": "https://api-dashboard.search.brave.com/app/keys",
+        "access_mode": "official_api",
+        "market": "全球（独立索引，官方 API）",
+        "risk": "ToS 对结果存储/再分发有限制；发布前请阅读条款（合规责任在用户）",
+    },
 )
 registry.register(MANIFEST)

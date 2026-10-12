@@ -87,5 +87,13 @@ MANIFEST = ProviderManifest(
     },
     secret_fields=("api_key",),
     factory=TavilySearchProvider,
+    preset={
+        "endpoint": DEFAULT_BASE,
+        "note": "1,000 信用/月自动续（免绑卡）；面向 AI 检索优化",
+        "apply_url": "https://app.tavily.com",
+        "access_mode": "official_api",
+        "market": "全球（AI 检索优化）",
+        "risk": "月度信用用尽即停；密钥前缀 tvly-，用后请勿泄露",
+    },
 )
 registry.register(MANIFEST)
