@@ -65,6 +65,31 @@
             <el-option v-for="(preset, key) in presets" :key="key" :value="key" :label="preset.display" />
           </el-select>
         </el-form-item>
+        <template v-if="activePreset">
+          <el-form-item label="接入方式">
+            <el-tag size="small" :type="activePreset.access_mode === 'html' ? 'warning' : 'success'">
+              {{ activePreset.access_mode === 'html' ? '网页解析' : '官方 API' }}
+            </el-tag>
+            <span class="hint">{{ activePreset.market }}</span>
+          </el-form-item>
+          <el-form-item v-if="activePreset.needs_key" label="申请密钥">
+            <el-link
+              v-if="activePreset.apply_url"
+              type="primary"
+              :href="activePreset.apply_url ?? undefined"
+              target="_blank"
+            >
+              前往官方申请页（{{ hostOf(activePreset.apply_url) }}）
+            </el-link>
+            <span v-else class="hint">{{ activePreset.display }}——请自行检索官方入口</span>
+          </el-form-item>
+          <el-form-item v-if="activePreset.note" label="说明">
+            <span class="hint">{{ activePreset.note }}</span>
+          </el-form-item>
+          <el-form-item v-if="activePreset.risk" label="风险提示">
+            <span class="hint">{{ activePreset.risk }}</span>
+          </el-form-item>
+        </template>
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item v-if="presets[form.type_key]?.needs_key" label="API 密钥">
           <el-input
@@ -95,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
 import type { SearchProviderRow } from '../../api/types'
@@ -106,10 +131,23 @@ interface Preset {
   endpoint: string
   needs_key: boolean
   note: string
+  apply_url?: string | null
+  access_mode?: 'official_api' | 'html'
+  market?: string
+  risk?: string
 }
 
 const items = ref<SearchProviderRow[]>([])
 const presets = ref<Record<string, Preset>>({})
+const activePreset = computed(() => presets.value[form.value.type_key] ?? null)
+
+function hostOf(url: string | null | undefined): string {
+  try {
+    return new URL(url ?? '').hostname
+  } catch {
+    return ''
+  }
+}
 const loading = ref(false)
 const testingId = ref<number | null>(null)
 const lastDetail = ref('')
