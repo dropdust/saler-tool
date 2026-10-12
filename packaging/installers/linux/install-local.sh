@@ -14,7 +14,7 @@ SRC="${1:-$ROOT/backend/dist/SalerTool}"
 DEST="$HOME/.local/opt/saler-tool"
 APPS="$HOME/.local/share/applications"
 
-[ -d "$SRC" ] || { echo "缺少冻结产物：$SRC（先执行 pyinstaller packaging/saler.spec，见 packaging/README）"; exit 1; }
+[ -d "$SRC" ] || { echo "缺少冻结产物：$SRC（先执行 pyinstaller packaging/saler.spec，见 packaging/installers/README.md）"; exit 1; }
 [ -x "$SRC/SalerTool" ] || { echo "产物缺少可执行文件：$SRC/SalerTool"; exit 1; }
 
 mkdir -p "$DEST" "$APPS"
