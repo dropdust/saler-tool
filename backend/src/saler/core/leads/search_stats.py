@@ -23,7 +23,7 @@ def _today() -> str:
     return datetime.now(UTC).date().isoformat()
 
 
-def apply_attempt(row: SearchProvider, *, ok: bool, error: ProviderError | None = None) -> None:
+def apply_attempt(row: SearchProvider, *, ok: bool, error_kind: str | None = None) -> None:
     """在既有行对象上应用一次尝试（调用方负责 commit；路由测试端点同口径复用）。"""
     if row.used_today_date != _today():
         row.used_today = 0
@@ -35,7 +35,7 @@ def apply_attempt(row: SearchProvider, *, ok: bool, error: ProviderError | None 
         row.last_error_at = None
     else:
         row.health = "failing"
-        row.last_error_kind = error.kind.value if error is not None else None
+        row.last_error_kind = error_kind
         row.last_error_at = datetime.now(UTC)
 
 
@@ -52,7 +52,7 @@ class SearchStatsRecorder:
             row = session.get(SearchProvider, row_id)
             if row is None:
                 return
-            apply_attempt(row, ok=ok, error=error)
+            apply_attempt(row, ok=ok, error_kind=error.kind.value if error is not None else None)
             session.commit()
 
 

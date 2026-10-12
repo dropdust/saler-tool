@@ -11,6 +11,7 @@ class TestResult:
     ok: bool
     detail: str = ""
     models: list[str] | None = None
+    kind: str | None = None  # 失败类别（ErrorKind.value；供渠道运行时记账，004 T211）
 
 
 class LLMProvider(Protocol):

@@ -10,6 +10,7 @@ import saler.providers.search  # noqa: F401  # 导入包即注册全部 manifest
 from saler.api.deps import get_session
 from saler.api.errors import not_found, unprocessable
 from saler.api.serializers import search_provider_to_dict
+from saler.core.leads.search_stats import apply_attempt
 from saler.db.models import SearchProvider
 from saler.providers.registry import registry
 from saler.providers.search._common import SEARCH_PRESETS
@@ -115,9 +116,9 @@ def test_provider(provider_id: int, db: Session = Depends(get_session)) -> dict:
     if adapter is None:
         raise unprocessable(f"适配器不可用：{row.type_key}")
     result = adapter.test_connection()
-    row.health = "healthy" if result.ok else "failing"
     row.last_test_at = datetime.now(UTC)
     row.last_test_result = result.detail[:2000]
+    apply_attempt(row, ok=result.ok, error_kind=result.kind)  # 与任务执行同口径（R9）
     db.commit()
     return {"ok": result.ok, "detail": result.detail}
 

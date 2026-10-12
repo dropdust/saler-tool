@@ -173,7 +173,7 @@ class DuckDuckGoFallbackProvider:
             self.search(query="connectivity test", count=1, timeout_s=15)
             return TestResult(ok=True, detail="连接成功")
         except ProviderError as exc:
-            return TestResult(ok=False, detail=f"[{exc.kind.value}] {exc}")
+            return TestResult(ok=False, detail=f"[{exc.kind.value}] {exc}", kind=exc.kind.value)
 
 
 MANIFEST = ProviderManifest(
