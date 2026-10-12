@@ -65,6 +65,8 @@ function providerRow(over: Record<string, unknown> = {}) {
     health: 'unknown',
     last_test_at: null,
     last_test_result: null,
+    last_error_kind: null,
+    last_error_at: null,
     ...over,
   }
 }
@@ -192,5 +194,64 @@ describe('检索渠道 · 信息卡（T218 / FR-013~016）', () => {
     await editBtn!.trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('前往官方申请页')
+  })
+})
+
+describe('检索渠道 · 风险透明（T221 / FR-017/018）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
+  })
+
+  function stubProviders(rows: Array<Record<string, unknown>>) {
+    mockedApi.get.mockImplementation(async (path: string) => {
+      if (path === '/search/providers') return rows
+      if (path === '/search/presets') return { presets: PRESETS, config_schemas: {} }
+      return {}
+    })
+  }
+
+  async function mountList(): Promise<VueWrapper> {
+    const wrapper = mount(SearchProviders, { global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('类型列标注接入方式；异常渠道显示最近失败原因', async () => {
+    stubProviders([
+      providerRow({
+        id: 1,
+        type_key: 'bing_html',
+        name: 'Bing 网页',
+        health: 'failing',
+        last_error_kind: 'rate_limit',
+        used_today: 3,
+      }),
+      providerRow({ id: 2, type_key: 'serper', name: '主 Serper', health: 'healthy' }),
+    ])
+    const text = (await mountList()).text()
+    expect(text).toContain('网页解析') // 免密钥行接入方式标签
+    expect(text).toContain('官方 API') // 付费行接入方式标签
+    expect(text).toContain('限流') // rate_limit 中文映射
+  })
+
+  it('失败原因映射全表（blocked/parse/timeout/auth/quota + null）', async () => {
+    const kinds: Array<[number, string | null]> = [
+      [1, 'blocked'],
+      [2, 'parse'],
+      [3, 'timeout'],
+      [4, 'auth'],
+      [5, 'quota'],
+      [6, null],
+    ]
+    stubProviders(
+      kinds.map(([id, kind]) =>
+        providerRow({ id, name: `渠道${id}`, health: 'failing', last_error_kind: kind }),
+      ),
+    )
+    const text = (await mountList()).text()
+    for (const label of ['风控封禁', '解析失败', '网络', '密钥', '额度', '异常']) {
+      expect(text).toContain(label)
+    }
   })
 })

@@ -108,7 +108,7 @@ description: "Task list for 检索渠道扩展——密钥申请指引与免密�
 ### Tests for User Story 3 ⚠️（先写，确认失败）
 
 - [X] T220 [P] [US3] 行响应字段扩展（红→绿）：`backend/src/saler/api/serializers.py` `search_provider_to_dict` 增 `last_error_kind`、`last_error_at`（ISO 或 null）；扩展 `backend/tests/contract/test_search_providers_api.py`——列表/详情响应含两字段、成功清空后为 null（contract §3）→ **1 项红→绿**（失败后响应 `last_error_kind=blocked`、`last_error_at` 非空）；全量 **320 passed**
-- [ ] T221 [US3] 前端呈现（红→绿）：`frontend/src/views/settings/SearchProviders.vue`——"类型"列附接入方式小标签（`access_mode` → 官方 API / 网页解析）；"健康"列 `failing` 时展示最近失败原因中文标签（映射全表：`rate_limit`→限流、`blocked`→风控封禁、`parse`→解析失败、`network`/`timeout`→网络、`auth`→密钥、`quota`→额度、null→仅"异常"）；扩展 `frontend/tests/search-providers.test.ts`——映射全表断言、标签渲染（FR-017/018）
+- [X] T221 [US3] 前端呈现（红→绿）：`frontend/src/views/settings/SearchProviders.vue`——"类型"列附接入方式小标签（`access_mode` → 官方 API / 网页解析）；"健康"列 `failing` 时展示最近失败原因中文标签（映射全表：`rate_limit`→限流、`blocked`→风控封禁、`parse`→解析失败、`network`/`timeout`→网络、`auth`→密钥、`quota`→额度、null→仅"异常"）；扩展 `frontend/tests/search-providers.test.ts`——映射全表断言、标签渲染（FR-017/018）→ **2 项红→绿**（类型列接入方式标签；失败原因映射全表：限流/风控封禁/解析失败/网络/密钥/额度）；前端 **56 passed** + lint clean
 - [ ] T222 [US3] 指引与文案更新（红→绿）：`frontend/src/views/settings/SearchProviders.vue` 页面 alert 重写——删除"Bing 已退役、Google PSE 已对新客户关闭，均不可用"式**过时断言**，改为两段式：官方 API 渠道（稳定、需密钥）与免密钥网页渠道（尽力而为、受风控影响、自动兜底、合规责任自担）；`backend/src/saler/api/routes/crawl.py` 409 文案去除写死的渠道枚举（Brave / Serper / Tavily / DDG）；前端测试断言 alert 文案不含"均不可用"类措辞并含网页渠道定位说明（FR-019/020）
 - [ ] T223 [US3] 验收（quickstart V6）：真实运行核对——渠道列表逐行"接入方式"标签全覆盖；构造网络类失败（渠道端点改为不可达主机）测试 → 提示归网络类、不误示为密钥问题；页面指引与 crawl 409 文案无过时结论、免密钥渠道"非官方接入、合规责任自担"提示可见；结论勾注 quickstart（SC-007 / FR-017~020）
 

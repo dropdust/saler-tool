@@ -14,7 +14,16 @@
       <el-table v-loading="loading" :data="items">
         <el-table-column prop="name" label="名称" min-width="180" />
         <el-table-column label="类型" width="130">
-          <template #default="{ row }">{{ presets[row.type_key]?.display || row.type_key }}</template>
+          <template #default="{ row }">
+            <div>{{ presets[row.type_key]?.display || row.type_key }}</div>
+            <el-tag
+              v-if="presets[row.type_key]?.access_mode"
+              size="small"
+              :type="presets[row.type_key]?.access_mode === 'html' ? 'warning' : 'success'"
+            >
+              {{ presets[row.type_key]?.access_mode === 'html' ? '网页解析' : '官方 API' }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="优先级" width="80">
           <template #default="{ row }">{{ row.priority }}</template>
@@ -27,9 +36,15 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="健康" width="86">
+        <el-table-column label="健康" width="110">
           <template #default="{ row }">
             <el-tag :type="healthType(row.health)" size="small">{{ healthLabel(row.health) }}</el-tag>
+            <div
+              v-if="row.health === 'failing' && row.last_error_kind"
+              class="hint"
+            >
+              {{ errorKindLabel(row.last_error_kind) }}
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="今日用量" width="90">
@@ -165,6 +180,20 @@ const form = ref({
 
 function healthType(health: string): 'success' | 'danger' | 'info' {
   return health === 'healthy' ? 'success' : health === 'failing' ? 'danger' : 'info'
+}
+
+const ERROR_KIND_LABELS: Record<string, string> = {
+  rate_limit: '限流',
+  blocked: '风控封禁',
+  parse: '解析失败',
+  network: '网络',
+  timeout: '网络',
+  auth: '密钥',
+  quota: '额度',
+}
+
+function errorKindLabel(kind: string | null | undefined): string {
+  return (kind && ERROR_KIND_LABELS[kind]) || kind || ''
 }
 
 function healthLabel(health: string): string {

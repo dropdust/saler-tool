@@ -186,6 +186,8 @@ export interface SearchProviderRow {
   health: 'unknown' | 'healthy' | 'failing'
   last_test_at: string | null
   last_test_result: string | null
+  last_error_kind: string | null
+  last_error_at: string | null
 }
 
 export interface ExclusionRuleRow {
