@@ -120,8 +120,8 @@ description: "Task list for 检索渠道扩展——密钥申请指引与免密�
 
 **Purpose**: 契约同步、全量回归与一致性审查
 
-- [X] T224 [P] 契约与文档同步（宪法"契约变更必须同步"；contract §7）：`specs/001-sales-tool/contracts/provider-adapters.md`（§2 检索：六个新 type_key 与接入方式、错误矩阵增 `parse`、`preset` 元数据约定、空结果纪律、链接还原通则）；`specs/001-sales-tool/contracts/local-api.md`（检索渠道节：`/search/presets` 响应扩展字段表、provider 行 +`last_error_kind`/`last_error_at`、运行时记账语义）；`specs/001-sales-tool/quickstart.md`（S 场景补"免费检索渠道可作补充/兜底（004 增量）"一句）
-- [ ] T225 回归与一致性：全量测试绿（后端 pytest 全量 / 前端 vitest + lint + build）；`/speckit-analyze` 一致性审查（FR-001~020 与 SC-001~007 覆盖核对，0 CRITICAL）；quickstart 全场景结论齐全（T214/T219/T223 已勾注）；`checklists/requirements.md` 收尾无未决项
+- [X] T224 [P] 契约与文档同步（宪法"契约变更必须同步"；contract §7）：`specs/001-sales-tool/contracts/provider-adapters.md`（§2 检索：六个新 type_key 与接入方式、错误矩阵增 `parse`、`preset` 元数据约定、空结果纪律、链接还原通则）；`specs/001-sales-tool/contracts/local-api.md`（检索渠道节：`/search/presets` 响应扩展字段表、provider 行 +`last_error_kind`/`last_error_at`、运行时记账语义）；`specs/001-sales-tool/quickstart.md`（S 场景补"免费检索渠道可作补充/兜底（004 增量）"一句）→ **完成**（错误矩阵增 parse、§2 增量块、registry 增 preset、检查单第 6 条；local-api 行扩展 + presets 行；quickstart S6 前置句）；三文件携带的他线在途改动（seeds-AI）经 `git stash` 隔离，提交后 `stash pop` 完整恢复（6 行原样，零夹带）
+- [X] T225 回归与一致性：全量测试绿（后端 pytest 全量 / 前端 vitest + lint + build）；`/speckit-analyze` 一致性审查（FR-001~020 与 SC-001~007 覆盖核对，0 CRITICAL）；quickstart 全场景结论齐全（T214/T219/T223 已勾注）；`checklists/requirements.md` 收尾无未决项 → 后端 **320 passed** + ruff 全过；前端 **57 passed**（11 文件）+ lint + build 通过；analyze：**0 CRITICAL**、FR 覆盖 20/20=100%、SC 7/7 有证据（LOW 2 项：SC-006 百分比口径、双节流域说明——均记录性）；quickstart **V1~V6 结论齐**；checklists **16/16 无未决项**——质量门满足
 
 ---
 
