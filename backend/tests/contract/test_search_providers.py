@@ -13,6 +13,7 @@ BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 SERPER_URL = "https://google.serper.dev/search"
 TAVILY_URL = "https://api.tavily.com/search"
 DDG_URL = "https://html.duckduckgo.com/html/"
+DDG_LITE_URL = "https://lite.duckduckgo.com/lite/"
 
 
 class TestBrave:
@@ -124,6 +125,13 @@ class TestDdgFallback:
     </body></html>
     """
     ANOMALY_HTML = "<html><body><div class='anomaly-modal'>detected unusual traffic</div></body></html>"
+    LITE_HTML = """
+    <html><body>
+      <a class="result-link" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Flite.example%2Fpage&rut=y">Lite Result</a>
+    </body></html>
+    """
+    NO_RESULTS_HTML = "<html><body><div class='no-results'>No results.</div></body></html>"
+    DETECT_PAGE_HTML = "<html><body>Please enable JavaScript to continue.</body></html>"
 
     @respx.mock
     def test_parses_and_decodes_redirect_urls(self):
@@ -139,7 +147,7 @@ class TestDdgFallback:
 
         respx.get(DDG_URL).mock(return_value=httpx.Response(202, text=self.ANOMALY_HTML))
         with pytest.raises(ProviderError) as excinfo:
-            DuckDuckGoFallbackProvider().search(query="q")
+            DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q")
         assert excinfo.value.kind == ErrorKind.BLOCKED
 
     @respx.mock
@@ -148,8 +156,55 @@ class TestDdgFallback:
 
         respx.get(DDG_URL).mock(return_value=httpx.Response(200, text=self.ANOMALY_HTML))
         with pytest.raises(ProviderError) as excinfo:
-            DuckDuckGoFallbackProvider().search(query="q")
+            DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q")
         assert excinfo.value.kind == ErrorKind.BLOCKED
+
+    @respx.mock
+    def test_lite_fallback_when_html_soft_blocked(self):
+        from saler.providers.search.ddg_fallback import DuckDuckGoFallbackProvider
+
+        respx.get(DDG_URL).mock(return_value=httpx.Response(202, text=""))
+        lite = respx.get(DDG_LITE_URL).mock(return_value=httpx.Response(200, text=self.LITE_HTML))
+        items = DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q")
+        assert lite.called  # html 软封禁 → lite 形态回退一次
+        assert items[0].url == "https://lite.example/page"
+
+    @respx.mock
+    def test_legal_empty_with_marker(self):
+        from saler.providers.search.ddg_fallback import DuckDuckGoFallbackProvider
+
+        respx.get(DDG_URL).mock(return_value=httpx.Response(200, text=self.NO_RESULTS_HTML))
+        assert DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q") == []
+
+    @respx.mock
+    def test_detection_page_without_marker_is_blocked(self):
+        from saler.providers.search.ddg_fallback import DuckDuckGoFallbackProvider
+
+        respx.get(DDG_URL).mock(return_value=httpx.Response(200, text=self.DETECT_PAGE_HTML))
+        respx.get(DDG_LITE_URL).mock(return_value=httpx.Response(403))
+        with pytest.raises(ProviderError) as excinfo:
+            DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q")
+        assert excinfo.value.kind == ErrorKind.BLOCKED
+
+    @respx.mock
+    def test_browser_ua_and_referer_sent(self):
+        from saler.providers.search.ddg_fallback import DuckDuckGoFallbackProvider
+
+        route = respx.get(DDG_URL).mock(return_value=httpx.Response(200, text=self.NORMAL_HTML))
+        DuckDuckGoFallbackProvider(params={"interval_s": 0}).search(query="q")
+        req = route.calls[0].request
+        assert "Mozilla" in req.headers["User-Agent"]
+        assert req.headers["Referer"] == "https://duckduckgo.com/"
+
+    def test_manifest_preset(self):
+        import saler.providers.search  # noqa: F401
+        from saler.providers.registry import registry
+
+        m = registry.get("search", "ddg_html")
+        assert m is not None and m.preset is not None
+        assert m.preset["access_mode"] == "html"
+        assert m.preset["apply_url"] is None
+        assert m.secret_fields == ()
 
 
 class _StubProvider:
