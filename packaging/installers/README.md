@@ -15,6 +15,16 @@
 
 系统需先装运行库与构建依赖：`sudo apt install python3-gi gir1.2-webkit2-4.1 python3-venv`
 
+**一键构建（推荐）**——等价于下方 ①–④（含前置检查与冒烟；`--install` 连带 ⑤）：
+
+```bash
+bash packaging/build-local.sh            # ①前端 → ②冻结 venv → ③PyInstaller → ④冒烟
+bash packaging/build-local.sh --install  # 构建 + 冒烟 + 安装到应用菜单
+# 其他开关：--skip-frontend（复用 frontend/dist）｜--no-smoke（发布前必须补跑）｜-h
+```
+
+**等价手动步骤**（CI 与本脚本共用同一流程）：
+
 ```bash
 # ① 前端产物
 cd frontend && pnpm install && pnpm build

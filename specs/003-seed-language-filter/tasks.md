@@ -116,6 +116,7 @@ description: "Task list for 种子列表语言筛选"
 - [X] T193 回归与一致性：全量测试绿（后端 222 全过 / 前端 vitest 32 + lint + build 通过）；`/speckit-analyze` 一致性审查——0 CRITICAL、0 HIGH、FR 覆盖 10/10=100%、SC 7/7 有证据任务；发现 F1（MEDIUM，审核列 `pending` 经 StatusTag 显示"待执行"——001 既存术语问题，不在本期范围，记后续独立事项）与 F2（LOW，SC-005"无可见退化"属定性，已由 T192 对比测量落地）；无任务调整需求
 - [X] T194（用户请求，2026-10-12 追加）F1 术语修正：`frontend/src/components/common/StatusTag.vue` 增 `domain` 属性（review 域 `pending` → `status.review`"待审核"，与审核筛选下拉口径一致；approved/rejected 标签不变）；`frontend/src/views/seeds/SeedList.vue` 审核列传入 `domain="review"`；配套组件测试 `frontend/tests/status-tag.test.ts`（红→绿：1 项确认失败 → 全绿，vitest 36 通过 + build 通过）
 - [X] T195（用户请求，2026-10-12 追加）`packaging/installers/linux/install-local.sh` 提示语路径漂移修正：`packaging/README` → `packaging/installers/README.md`（`bash -n` 语法通过；全仓同类引用仅此一处）
+- [X] T196（用户请求，2026-10-12 追加）本机构建脚本：新增 `packaging/build-local.sh`——①前端 → ②冻结 venv（system-site-packages，缺失才建）→ ③PyInstaller → ④冒烟 一键化；开关 `--skip-frontend` / `--no-smoke` / `--install`；前置检查 pnpm/uv/系统 gi（`SALER_FROZEN_PYTHON` 可覆盖）。`packaging/installers/README.md` 增一键构建入口；端到端实跑通过（PyInstaller 完成 + 冒烟全过）
 
 **说明（冻结包冒烟）**：沿用 001 S1/S6/S10（种子列表在其覆盖内）；本特性零新依赖、无打包面变化，不新增冻结包冒烟场景（理由记入 T193 提交信息）。
 
