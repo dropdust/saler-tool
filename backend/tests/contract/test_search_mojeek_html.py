@@ -68,6 +68,15 @@ class TestMojeekBlocked:
             _engine().search(query="test")
         assert ei.value.kind == ErrorKind.BLOCKED
 
+    @respx.mock
+    def test_captcha_page_200_is_blocked_with_marker(self):
+        # T214 真实验收发现：Mojeek 以 HTTP 200 返回 <title>Captcha</title> 挑战页
+        respx.get(MOJEEK_URL).mock(return_value=httpx.Response(200, text=fx("captcha.html")))
+        with pytest.raises(ProviderError) as ei:
+            _engine().search(query="test")
+        assert ei.value.kind == ErrorKind.BLOCKED
+        assert "Captcha" in str(ei.value)  # 诊断文案应点明验证页（而非仅"容器缺失"）
+
 
 class TestMojeekManifest:
     def test_registered_with_preset(self):

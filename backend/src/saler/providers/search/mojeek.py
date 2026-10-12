@@ -37,7 +37,13 @@ class MojeekHTMLEngine(HTMLSearchEngine):
         return self._base_url, {"q": query}, {}
 
     def _check_blocked(self, resp: httpx.Response) -> None:
-        if "403 - Forbidden" in resp.text:
+        text = resp.text
+        # T214 真实验收发现：Mojeek 以 HTTP 200 返回 <title>Captcha</title> 挑战页
+        if "<title>Captcha" in text:
+            raise ProviderError(
+                ErrorKind.BLOCKED, "Mojeek 验证页（Captcha，200 承载）", provider=self.type_key
+            )
+        if "403 - Forbidden" in text:
             raise ProviderError(
                 ErrorKind.BLOCKED, "403 - Forbidden 页（200 承载）", provider=self.type_key
             )
