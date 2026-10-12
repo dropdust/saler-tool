@@ -101,7 +101,8 @@
 | GET/POST | `/channels`；PUT/DELETE `/channels/{id}` | 通道 CRUD；`secret` 只写不读回（FR-006/040） |
 | POST | `/channels/{id}/test` | 连通性测试 → `{ok, detail}`（FR-041） |
 | GET | `/channels/{id}/usage` | 当日用量/额度/健康状态（FR-042/044） |
-| GET | `/search/providers`；POST/PUT `/search/providers[...]`；POST `/search/providers/{id}/test` | 检索渠道配置与测试（FR-019） |
+| GET | `/search/providers`；POST/PUT `/search/providers[...]`；POST `/search/providers/{id}/test` | 检索渠道配置与测试（FR-019）；行含 `last_error_kind/at`（最近失败；测试与任务同口径记账 `used_today`，004） |
+| GET | `/search/presets` | 渠道预置元数据 `{presets, config_schemas}`——presets 字段：display/endpoint/needs_key（派生）/note/apply_url/access_mode/market/risk，由注册表派生（004） |
 
 ### 营销计划（US6）
 

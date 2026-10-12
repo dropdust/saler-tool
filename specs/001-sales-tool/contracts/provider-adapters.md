@@ -17,6 +17,7 @@
 | `rate_limit` | 被限流（含 Retry-After） | 按建议退避重试 |
 | `timeout` / `network` | 网络问题 | 指数退避重试 |
 | `blocked` | 被目标风控/拒答（检索特有） | 切备用渠道/降速 |
+| `parse` | 页面结构变化/解析失败（网页端检索特有；004） | 立即切换下一渠道（不可重试） |
 | `invalid_output` | 输出不符合 schema（LLM 特有） | 携带校验错误重试（有限次） |
 | `recipient_rejected` | 收件人被拒（发送特有） | 记入台账标记失败，不重试 |
 | `server` | 对端 5xx | 退避重试 |
@@ -83,6 +84,14 @@ class SearchProvider(Protocol):
 - 查询构造由种子完成；适配器不做查询改写。
 - 结果去重、平台站过滤（目录站/社媒平台）在任务层完成，适配器保持简单。
 
+**004 增量：免密钥渠道与安全失败纪律**（详见 [004 契约](../../004-search-channel-expansion/contracts/search-channel-expansion-contract.md)）：
+- 类型清单（共 9）：需密钥 `brave/serper/tavily`；免密钥 `bing_html`（RSS 形态优先 + HTML 回退）、`baidu_html`（`mu` 离线还原、cookie 与 UA 配对）、`mojeek_html`、`google_html`（`/url?q=` 离线、`/goto` 跟随一次）、`wikipedia`（官方 API、描述性 UA）、`ddg_html`（既有兜底、lite 回退一次）。
+- **错误矩阵增 `parse`**；**空结果纪律**：命中风控标记 → `blocked`；结构正常确无结果 → 合法空 `[]`；容器整体缺失/无法区分 → `blocked`（绝不写脏数据）。
+- **链接还原通则**：包装链接一律还原为目标地址（百度 `mu`/`data-landurl`、Bing `ck/a` base64url、DDG `uddg` 离线；Google `/goto` 签名跟随一次）；不可还原 → 丢弃该条，MUST NOT 写入包装链接。
+- **预置元数据**：注册 manifest 增可选 `preset`（endpoint/note/apply_url/access_mode ∈ {official_api, html}/market/risk）；`needs_key` 为派生值（`secret_fields` 非空）；`GET /search/presets` 由注册表派生。
+- **运行时记账**（测试与任务同口径）：每次渠道调用尝试 `used_today` +1（按日重置）；成功 `healthy` 且清空最近失败；失败 `failing` + `last_error_kind/at`。
+- **节流**：网页渠道引擎级最小间隔（默认 2.0s + 0~1.5s 抖动；渠道 `params.interval_s` 可调、≤0 显式关闭）；浏览器 UA 池轮换（百度 cookie/UA 配对；Wikipedia 描述性 UA）。
+
 ## 3. 邮件发送（Mail）适配器
 
 ```python
@@ -115,10 +124,10 @@ class SMSSender(Protocol):
 
 ## 5. 通道健康与注册表
 
-- 每类适配器实现向 **Provider Registry** 注册：`{type_key, display_name, config_schema(JSON Schema), secret_fields[], factory}`。
+- 每类适配器实现向 **Provider Registry** 注册：`{type_key, display_name, config_schema(JSON Schema), secret_fields[], factory, preset?}`（`preset` 为 004 增量：渠道预置元数据）。
 - 前端通过 `GET /api/v1/<类别>/providers` 读取 `config_schema` 动态渲染配置表单（这样新增提供方无需改前端）。
 - `POST /…/{id}/test` 统一映射到适配器的 `test_connection()/verify()`。
 
 ## 6. 新增提供方的检查单
 
-1. 实现对应 Protocol；2. 注册 manifest（type_key、config_schema、secret_fields）；3. 提供 fixture 级联调（不依赖真实凭证的假实现）；4. 明确错误分类映射；5. 在 research.md"后续可接入"清单中登记候选。
+1. 实现对应 Protocol；2. 注册 manifest（type_key、config_schema、secret_fields）；3. 提供 fixture 级联调（不依赖真实凭证的假实现）；4. 明确错误分类映射；5. 在 research.md"后续可接入"清单中登记候选；6. 检索网页解析型渠道（004）：实现 `_check_blocked`/`_results_container_present` 安全失败纪律，并提供 `preset`（风险提示必填）。

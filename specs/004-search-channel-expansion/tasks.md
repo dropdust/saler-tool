@@ -120,7 +120,7 @@ description: "Task list for 检索渠道扩展——密钥申请指引与免密�
 
 **Purpose**: 契约同步、全量回归与一致性审查
 
-- [ ] T224 [P] 契约与文档同步（宪法"契约变更必须同步"；contract §7）：`specs/001-sales-tool/contracts/provider-adapters.md`（§2 检索：六个新 type_key 与接入方式、错误矩阵增 `parse`、`preset` 元数据约定、空结果纪律、链接还原通则）；`specs/001-sales-tool/contracts/local-api.md`（检索渠道节：`/search/presets` 响应扩展字段表、provider 行 +`last_error_kind`/`last_error_at`、运行时记账语义）；`specs/001-sales-tool/quickstart.md`（S 场景补"免费检索渠道可作补充/兜底（004 增量）"一句）
+- [X] T224 [P] 契约与文档同步（宪法"契约变更必须同步"；contract §7）：`specs/001-sales-tool/contracts/provider-adapters.md`（§2 检索：六个新 type_key 与接入方式、错误矩阵增 `parse`、`preset` 元数据约定、空结果纪律、链接还原通则）；`specs/001-sales-tool/contracts/local-api.md`（检索渠道节：`/search/presets` 响应扩展字段表、provider 行 +`last_error_kind`/`last_error_at`、运行时记账语义）；`specs/001-sales-tool/quickstart.md`（S 场景补"免费检索渠道可作补充/兜底（004 增量）"一句）
 - [ ] T225 回归与一致性：全量测试绿（后端 pytest 全量 / 前端 vitest + lint + build）；`/speckit-analyze` 一致性审查（FR-001~020 与 SC-001~007 覆盖核对，0 CRITICAL）；quickstart 全场景结论齐全（T214/T219/T223 已勾注）；`checklists/requirements.md` 收尾无未决项
 
 ---
