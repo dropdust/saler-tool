@@ -27,7 +27,7 @@ async def create_crawl_job(
     payload: CrawlJobRequest, request: Request, db: Session = Depends(get_session)
 ) -> dict:
     config = CrawlConfig.from_dict(payload.config)
-    chain = resolve_search_chain(db, config)
+    chain = resolve_search_chain(db, config, session_factory=request.app.state.session_factory)
     if chain is None:
         raise ApiError(
             409,

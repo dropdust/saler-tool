@@ -30,7 +30,7 @@ def _inject_offline_pipeline(monkeypatch) -> FakeFetcher:
     fetcher = FakeFetcher(PAGES)
     monkeypatch.setattr(
         "saler.api.routes.crawl.resolve_search_chain",
-        lambda db, config: FakeSearchProvider(SEARCH_RESULTS),
+        lambda db, config, session_factory=None: FakeSearchProvider(SEARCH_RESULTS),
     )
     monkeypatch.setattr("saler.api.routes.crawl.Fetcher", lambda **_kwargs: fetcher)
     return fetcher

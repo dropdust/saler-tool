@@ -140,6 +140,12 @@ def seed_langs(db: Session = Depends(get_session)) -> list[str]:
     return seed_service.distinct_langs(db)
 
 
+@router.get("/batches")
+def seed_batches(db: Session = Depends(get_session)) -> list[str]:
+    """批次筛选选项数据源（T198）：库内去重精确取值（升序）。声明须先于 /{seed_id}。"""
+    return seed_service.distinct_batches(db)
+
+
 @router.post("", status_code=201)
 def create_seed(payload: SeedCreate, db: Session = Depends(get_session)) -> dict:
     return seed_to_dict(seed_service.create_seed(db, **payload.model_dump()))
@@ -218,7 +224,7 @@ class DiscoverRequest(BaseModel):
 @router.post("/discover", status_code=202)
 async def discover(payload: DiscoverRequest, request: Request, db: Session = Depends(get_session)) -> dict:
     """检索扩充图谱（FR-013）：关键词 → 检索渠道 → 候选实体/种子（全部进入待审核）。"""
-    chain = resolve_search_chain(db)
+    chain = resolve_search_chain(db, session_factory=request.app.state.session_factory)
     if chain is None:
         raise unprocessable("尚未配置可用的检索渠道：请先在「设置 → 检索渠道」添加并启用")
     manager = request.app.state.job_manager
