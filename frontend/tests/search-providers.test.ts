@@ -255,3 +255,20 @@ describe('检索渠道 · 风险透明（T221 / FR-017/018）', () => {
     }
   })
 })
+
+describe('检索渠道 · 指引文案（T222 / FR-019）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
+    stubApi()
+  })
+
+  it('指引为两段式定位（官方 API / 免密钥网页渠道）；不含过时"均不可用"断言', async () => {
+    const wrapper = mount(SearchProviders, { global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('尽力而为')
+    expect(text).toContain('失败自动切换')
+    expect(text).not.toContain('均不可用')
+  })
+})

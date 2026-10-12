@@ -32,7 +32,7 @@ async def create_crawl_job(
         raise ApiError(
             409,
             "search_not_configured",
-            "尚未配置检索渠道：请在「设置 → 检索渠道」中添加并启用（Brave / Serper / Tavily / DDG）",
+            "尚未配置检索渠道：请在「设置 → 检索渠道」中添加并启用（官方 API 或免密钥网页渠道均可）",
         )
     manager = request.app.state.job_manager
     record = CrawlJob(

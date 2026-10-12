@@ -40,7 +40,11 @@ def test_crawl_without_search_provider_is_409(client):
     client.post("/api/v1/seeds", json={"query": "q", "batch": "s6"})
     resp = client.post("/api/v1/crawl/jobs", json={})
     assert resp.status_code == 409
-    assert resp.json()["code"] == "search_not_configured"
+    body = resp.json()
+    assert body["code"] == "search_not_configured"
+    # T222/FR-019：指引与当前渠道集合一致——不得再写死渠道名枚举或过时断言
+    assert "官方 API" in body["message"] and "免密钥" in body["message"]
+    assert "Brave / Serper / Tavily / DDG" not in body["message"]
 
 
 def test_s6_s7_full_flow(client, monkeypatch, data_dir):

@@ -13,7 +13,7 @@
     <el-card shadow="never">
       <el-table v-loading="loading" :data="items">
         <el-table-column prop="name" label="名称" min-width="180" />
-        <el-table-column label="类型" width="130">
+        <el-table-column label="类型" width="170">
           <template #default="{ row }">
             <div>{{ presets[row.type_key]?.display || row.type_key }}</div>
             <el-tag
@@ -69,7 +69,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="建议顺序：Serper（注册最简）→ Brave → Tavily；DuckDuckGo 为非官方端点，仅作最后兜底。Bing 已退役、Google PSE 已对新客户关闭，均不可用。"
+        title="官方 API 渠道（稳定、需密钥）：Serper（注册最简）→ Brave → Tavily。免密钥网页渠道（尽力而为、受风控影响、失败自动切换、合规责任自担）：Bing → Wikipedia → 百度 → Mojeek → DuckDuckGo → Google。"
       />
     </el-card>
 
