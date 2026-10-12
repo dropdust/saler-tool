@@ -210,6 +210,8 @@ def search_provider_to_dict(row) -> dict[str, Any]:
         "health": row.health,
         "last_test_at": iso(row.last_test_at),
         "last_test_result": row.last_test_result,
+        "last_error_kind": row.last_error_kind,  # 最近失败类别（004 R9/FR-018）
+        "last_error_at": iso(row.last_error_at),
     }
 
 

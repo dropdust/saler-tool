@@ -113,3 +113,14 @@ class TestProviderTestEndpoint:
             assert db_row.health == "healthy"
             assert db_row.last_error_kind is None and db_row.last_error_at is None
             assert db_row.used_today == 1
+
+    @respx.mock
+    def test_response_exposes_last_error_fields(self, client):
+        """T220：行响应暴露 last_error_kind/at（US3 风险透明呈现的数据源）。"""
+        row = client.post("/api/v1/search/providers", json={"type_key": "ddg_html", "name": "DDG3"}).json()
+        respx.get(self.DDG_URL).mock(return_value=httpx.Response(202, text=""))
+        respx.get(self.DDG_LITE).mock(return_value=httpx.Response(403))
+        client.post(f"/api/v1/search/providers/{row['id']}/test")
+        listed = next(r for r in client.get("/api/v1/search/providers").json() if r["id"] == row["id"])
+        assert listed["last_error_kind"] == "blocked"
+        assert listed["last_error_at"]
