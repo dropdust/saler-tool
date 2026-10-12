@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import saler.providers.search  # noqa: F401  # 导入包即注册全部 manifest（约定）
 from saler.api.deps import get_session
 from saler.api.errors import not_found, unprocessable
 from saler.api.serializers import search_provider_to_dict
@@ -15,7 +16,10 @@ from saler.providers.search._common import SEARCH_PRESETS
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-SEARCH_KINDS = ("brave", "serper", "tavily", "ddg_html")
+
+def _search_kinds() -> set[str]:
+    """类型值域 = registry 全量——新增渠道零改动被发现（004 R8）。"""
+    return {m.type_key for m in registry.by_kind("search")}
 
 
 class ProviderCreate(BaseModel):
@@ -48,8 +52,8 @@ def _build_adapter(row: SearchProvider):
     manifest = registry.get("search", row.type_key)
     if manifest is None or manifest.factory is None:
         return None
-    kwargs: dict = {}
-    if row.type_key != "ddg_html":
+    kwargs: dict = {"params": row.params or {}}
+    if manifest.secret_fields:  # 需密钥类型才注入（免密钥渠道由 manifest 驱动，免特判）
         kwargs["api_key"] = row.secret_encrypted or ""
     if row.endpoint:
         kwargs["base_url"] = row.endpoint
@@ -64,7 +68,7 @@ def list_providers(db: Session = Depends(get_session)) -> list[dict]:
 
 @router.post("/providers", status_code=201)
 def create_provider(payload: ProviderCreate, db: Session = Depends(get_session)) -> dict:
-    if payload.type_key not in SEARCH_KINDS:
+    if payload.type_key not in _search_kinds():
         raise unprocessable(f"暂不支持的检索渠道：{payload.type_key}")
     row = SearchProvider(
         type_key=payload.type_key,

@@ -25,6 +25,7 @@ class BraveSearchProvider:
         proxy: str | None = None,
         base_url: str = DEFAULT_BASE,
         client: httpx.Client | None = None,
+        params: dict | None = None,  # 渠道级参数（装配统一注入；本适配器暂不读取）
     ) -> None:
         self._api_key = api_key
         self._proxy = proxy
