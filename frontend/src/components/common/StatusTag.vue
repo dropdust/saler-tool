@@ -6,7 +6,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{ status: string }>()
+const props = defineProps<{ status: string; domain?: 'review' }>()
 const { t, te } = useI18n()
 
 const TYPES: Record<string, string> = {
@@ -25,5 +25,10 @@ const TYPES: Record<string, string> = {
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
 const tagType = computed<TagType>(() => (TYPES[props.status] as TagType) ?? 'info')
-const label = computed(() => (te(`status.${props.status}`) ? t(`status.${props.status}`) : props.status))
+
+// 审核域：review_status=pending 与执行状态 pending 共用同值，但标签应为"待审核"（T194，与筛选下拉口径一致）
+const labelKey = computed(() =>
+  props.domain === 'review' && props.status === 'pending' ? 'status.review' : `status.${props.status}`,
+)
+const label = computed(() => (te(labelKey.value) ? t(labelKey.value) : props.status))
 </script>

@@ -92,7 +92,7 @@
           <template #default="{ row }"><StatusTag :status="row.status" /></template>
         </el-table-column>
         <el-table-column label="审核" width="86">
-          <template #default="{ row }"><StatusTag :status="row.review_status" /></template>
+          <template #default="{ row }"><StatusTag :status="row.review_status" domain="review" /></template>
         </el-table-column>
         <el-table-column prop="n_candidates" label="候选" width="64" />
         <el-table-column prop="n_contacts" label="联系方式" width="82" />
