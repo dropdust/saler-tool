@@ -66,13 +66,16 @@
           </el-select>
         </el-form-item>
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item v-if="form.type_key !== 'ddg_html'" label="API 密钥">
+        <el-form-item v-if="presets[form.type_key]?.needs_key" label="API 密钥">
           <el-input
             v-model="form.api_key"
             type="password"
             show-password
             :placeholder="editing ? '留空则保持原密钥不变' : '粘贴服务商密钥'"
           />
+        </el-form-item>
+        <el-form-item v-else-if="presets[form.type_key]" label="API 密钥">
+          <span class="hint">无需密钥（保存后可在列表中"测试"验证连通）</span>
         </el-form-item>
         <el-form-item label="端点">
           <el-input v-model="form.endpoint" placeholder="留空使用默认端点" />
