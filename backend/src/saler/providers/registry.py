@@ -18,6 +18,7 @@ class ProviderManifest:
     config_schema: dict = field(default_factory=dict)  # JSON Schema（前端动态表单）
     secret_fields: tuple[str, ...] = ()
     factory: Callable[..., Any] | None = None
+    preset: dict[str, Any] | None = None  # 渠道预置元数据（search 渠道 UI 呈现；004 R8）
 
 
 class ProviderRegistry:
