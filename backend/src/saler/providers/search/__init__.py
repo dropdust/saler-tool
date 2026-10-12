@@ -11,3 +11,4 @@ import saler.providers.search.ddg_fallback  # noqa: F401
 import saler.providers.search.mojeek  # noqa: F401
 import saler.providers.search.serper  # noqa: F401
 import saler.providers.search.tavily  # noqa: F401
+import saler.providers.search.wikipedia  # noqa: F401

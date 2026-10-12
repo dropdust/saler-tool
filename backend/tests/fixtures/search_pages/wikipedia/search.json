@@ -1,0 +1,17 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "search": [
+      {
+        "title": "Rust (programming language)",
+        "pageid": 1,
+        "snippet": "<span class=\"searchmatch\">Rust</span> 是一门系统编程语言"
+      },
+      {
+        "title": "Rust",
+        "pageid": 2,
+        "snippet": "Rust 可以指："
+      }
+    ]
+  }
+}
