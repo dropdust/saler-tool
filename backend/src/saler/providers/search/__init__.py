@@ -8,6 +8,7 @@ import saler.providers.search.baidu  # noqa: F401
 import saler.providers.search.bing  # noqa: F401
 import saler.providers.search.brave  # noqa: F401
 import saler.providers.search.ddg_fallback  # noqa: F401
+import saler.providers.search.google  # noqa: F401
 import saler.providers.search.mojeek  # noqa: F401
 import saler.providers.search.serper  # noqa: F401
 import saler.providers.search.tavily  # noqa: F401
