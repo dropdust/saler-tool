@@ -115,7 +115,7 @@
 | 测试 | 断言 |
 | --- | --- |
 | `tests/contract/test_search_providers.py`（各引擎新类） | 解析（标题/链接/摘要）、链接还原（含 `&amp;`、`uddg`、`mu` 等样本）、风控样本 → 对应 `blocked`、结构异常样本 → `parse`、空结果纪律三分支 |
-| `tests/contract/test_search_presets.py`（新增） | 值域 = 10 类型；需密钥 ⇒ `apply_url` 非空；`html` ⇒ `risk` 非空；`needs_key` 与 `secret_fields` 一致 |
+| `tests/contract/test_search_presets.py`（新增） | 动态遍历注册表（当前 9 类型）；需密钥 ⇒ `apply_url` 非空；`html` ⇒ `risk` 非空；`needs_key` 与 `secret_fields` 一致 |
 | `tests/unit/test_search_stats.py`（新增） | 记账三分支（成功/失败/日切重置）；成功清空最近失败；`session_factory=None` no-op |
 | `frontend/tests/search-providers.test.ts`（新增） | 密钥字段按 `needs_key` 显隐；申请地址渲染与缺失兜底；`last_error_kind` 中文映射全表 |
 

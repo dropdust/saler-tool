@@ -57,6 +57,25 @@ class TestPresetsEndpoint:
         assert "serper" in body["config_schemas"]
         assert body["config_schemas"]["serper"].get("required") == ["api_key"]
 
+    def test_presets_cover_registry_with_full_fields(self, client):
+        """T217：预置端点由 registry 派生（单一数据源）；needs_key 为派生值。"""
+        import saler.providers.search  # noqa: F401
+        from saler.providers.registry import registry
+
+        body = client.get("/api/v1/search/presets").json()
+        registered = {m.type_key for m in registry.by_kind("search")}
+        assert len(registered) >= 9  # 3 需密钥 + 6 免密钥
+        assert set(body["presets"]) == registered
+        full = {"display", "endpoint", "needs_key", "note", "apply_url", "access_mode", "market", "risk"}
+        for m in registry.by_kind("search"):
+            preset = body["presets"][m.type_key]
+            assert full <= set(preset), m.type_key
+            assert preset["needs_key"] == bool(m.secret_fields), m.type_key
+            if m.secret_fields:
+                assert preset["apply_url"], m.type_key
+            if preset["access_mode"] == "html":
+                assert preset["risk"], m.type_key
+
 
 class TestProviderTestEndpoint:
     """T211：手工测试与任务执行同口径记账（health/last_error_*/used_today；contract §3）。"""

@@ -21,7 +21,7 @@
 | `market` | string | 适用市场与定位 | 必填（FR-014；如"中文市场"/"独立索引"/"机构资料与佐证"） |
 | `risk` | string | 条款/风控/合规提示 | **`html` 类型必填**（FR-020）；`official_api` 有条款限制时亦填 |
 
-### 十个渠道类型的预置数据（定稿清单）
+### 九个渠道类型的预置数据（定稿清单：3 需密钥 + 6 免密钥）
 
 | type_key | display | access_mode | needs_key | apply_url | market（摘要） |
 | --- | --- | --- | --- | --- | --- |

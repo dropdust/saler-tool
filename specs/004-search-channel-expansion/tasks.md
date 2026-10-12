@@ -91,7 +91,7 @@ description: "Task list for 检索渠道扩展——密钥申请指引与免密�
 ### Implementation for User Story 2
 
 - [X] T216 [P] [US2] 付费渠道预置数据补齐（转绿 T215）：`backend/src/saler/providers/search/brave.py`、`serper.py`、`tavily.py` 的 MANIFEST 增 preset——`apply_url`：Brave=`https://api-dashboard.search.brave.com/app/keys`（旧址 api.search.brave.com/app/keys 已 403，不得使用）、Serper=`https://serper.dev/dashboard`、Tavily=`https://app.tavily.com`；note 更新：Serper 赠 2,500 次为**一次性**、Brave 每月 $5 信用**需绑卡**、Tavily 1,000 信用/月；`market` 与 `risk`（Brave ToS 存储条款等）（research R11）→ **转绿（4 passed）**
-- [ ] T217 [US2] 预置端点 registry 派生（红→绿）：`backend/src/saler/api/routes/search_providers.py` `GET /search/presets` 改由 registry 组装（`display=display_name`、`needs_key` 派生、其余字段取自 `preset`）；删除 `backend/src/saler/providers/search/_common.py` 的 `SEARCH_PRESETS` 字典（唯一数据源=各 manifest）；扩展 `backend/tests/contract/test_search_providers_api.py`——presets 覆盖全部注册类型、字段完整、`config_schemas` 形状不变（向后兼容，既有键 display/endpoint/needs_key/note 保留）
+- [X] T217 [US2] 预置端点 registry 派生（红→绿）：`backend/src/saler/api/routes/search_providers.py` `GET /search/presets` 改由 registry 组装（`display=display_name`、`needs_key` 派生、其余字段取自 `preset`）；删除 `backend/src/saler/providers/search/_common.py` 的 `SEARCH_PRESETS` 字典（唯一数据源=各 manifest）；扩展 `backend/tests/contract/test_search_providers_api.py`——presets 覆盖全部注册类型、字段完整、`config_schemas` 形状不变（向后兼容，既有键 display/endpoint/needs_key/note 保留）→ **1 项红→绿 + 8 项保持绿**（覆盖 = registry 全集、8 字段完整、needs_key 派生一致）；`_common.SEARCH_PRESETS` 删除；顺带修正渠道类型总数笔误（9 = 3 需密钥 + 6 免密钥，涉 plan/data-model/contract/quickstart）；全量 **319 passed**
 - [ ] T218 [US2] 前端信息卡（红→绿）：`frontend/src/api/types.ts` `Preset` 扩展（`apply_url/access_mode/market/risk`）；`frontend/src/views/settings/SearchProviders.vue` 添加/编辑对话框在类型选定后渲染信息卡——接入方式标签、申请地址按钮（`el-link` + `target="_blank"` 系统浏览器打开，仅 needs_key 时）、note/market/risk 全文、免密钥显示"无需密钥"；申请地址缺失时呈现"服务商名 + 域名"可读兜底（FR-016）；扩展 `frontend/tests/search-providers.test.ts`——各字段渲染、needs_key=false 无申请按钮、失效兜底文案（FR-013~015）
 - [ ] T219 [US2] 验收（quickstart V1）：真实运行（CDP 自动驱动）——逐类型打开添加对话框核对信息卡；点击 Brave/Serper/Tavily 申请地址确认在**系统浏览器**打开对应官方页面；免密钥 7 类型无密钥字段；编辑既有渠道同样可见信息卡；结论勾注 quickstart（SC-005 / FR-013~016）
 
@@ -203,4 +203,4 @@ Task: "Google 适配器 + 契约测试 in backend/src/saler/providers/search/goo
 - 契约变更台账：本特性 contracts/search-channel-expansion-contract.md §7 要求同步 001 两份契约与 quickstart（T224）
 - 研发须知（引擎纪律，全部落于契约 §4）：风控页/伪装页绝不写入数据；链接包装必须还原否则丢弃；合法空结果与拦截空结果分不清时按 `blocked` 保守处理；节流默认 2s+抖动（`params.interval_s` 可调）
 - 网络现实声明：共享/数据中心出口被风控是已知现实（runte 教训），真实网络单引擎失败属预期呈现，不作为验收阻塞项；防脏数据与切换纪律由离线契约测试（T203–T209/T213）保证
-- 避免：模糊任务、同文件并行冲突、破坏故事独立性的跨故事依赖（US2 的契约测试必须动态遍历注册表，不得写死 10 类型清单）
+- 避免：模糊任务、同文件并行冲突、破坏故事独立性的跨故事依赖（US2 的契约测试必须动态遍历注册表，不得写死类型清单（当前为 9））

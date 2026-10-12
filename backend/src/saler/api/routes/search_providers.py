@@ -13,7 +13,6 @@ from saler.api.serializers import search_provider_to_dict
 from saler.core.leads.search_stats import apply_attempt
 from saler.db.models import SearchProvider
 from saler.providers.registry import registry
-from saler.providers.search._common import SEARCH_PRESETS
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -125,5 +124,24 @@ def test_provider(provider_id: int, db: Session = Depends(get_session)) -> dict:
 
 @router.get("/presets")
 def presets() -> dict:
-    manifests = {m.type_key: m.config_schema for m in registry.by_kind("search")}
-    return {"presets": SEARCH_PRESETS, "config_schemas": manifests}
+    """预置元数据由 registry 派生（单一数据源 = 各 manifest.preset；004 R8）。
+
+    既有键 display/endpoint/needs_key/note 语义不变（向后兼容）；新增
+    apply_url/access_mode/market/risk；needs_key 为派生值（secret_fields 非空）。
+    """
+    out: dict[str, dict] = {}
+    schemas: dict[str, dict] = {}
+    for m in registry.by_kind("search"):
+        p = m.preset or {}
+        out[m.type_key] = {
+            "display": m.display_name,
+            "endpoint": p.get("endpoint", ""),
+            "needs_key": bool(m.secret_fields),
+            "note": p.get("note", ""),
+            "apply_url": p.get("apply_url"),
+            "access_mode": p.get("access_mode", "official_api"),
+            "market": p.get("market", ""),
+            "risk": p.get("risk", ""),
+        }
+        schemas[m.type_key] = m.config_schema
+    return {"presets": out, "config_schemas": schemas}

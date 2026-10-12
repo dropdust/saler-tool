@@ -10,34 +10,6 @@ from saler.providers.errors import ErrorKind, ProviderError
 
 DEFAULT_UA = "SalerTool/0.1 (local desktop lead discovery)"
 
-# 首批支持的渠道（UI 预置；绑定用户自备密钥）
-SEARCH_PRESETS: dict[str, dict[str, Any]] = {
-    "brave": {
-        "display": "Brave Search",
-        "endpoint": "https://api.search.brave.com/res/v1",
-        "needs_key": True,
-        "note": "免费额度需绑卡；ToS 对存储结果有限制，请阅读条款",
-    },
-    "serper": {
-        "display": "Serper.dev（Google SERP）",
-        "endpoint": "https://google.serper.dev",
-        "needs_key": True,
-        "note": "注册赠 2500 次、免绑卡；接入最简",
-    },
-    "tavily": {
-        "display": "Tavily（AI 检索）",
-        "endpoint": "https://api.tavily.com",
-        "needs_key": True,
-        "note": "每月 1000 信用自动续",
-    },
-    "ddg_html": {
-        "display": "DuckDuckGo（非官方，最后兜底）",
-        "endpoint": "https://html.duckduckgo.com/html/",
-        "needs_key": False,
-        "note": "非官方端点，软封禁风险高，仅作最后兜底",
-    },
-}
-
 
 def build_client(*, timeout_s: float, proxy: str | None = None) -> httpx.Client:
     # trust_env=False：代理只走显式配置（回环/本机服务不被环境变量劫持）
