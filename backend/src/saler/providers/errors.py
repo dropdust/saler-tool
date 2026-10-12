@@ -12,6 +12,7 @@ class ErrorKind(StrEnum):
     TIMEOUT = "timeout"                # 超时
     NETWORK = "network"                # 网络问题
     BLOCKED = "blocked"                # 被目标风控/拒答（检索特有）
+    PARSE = "parse"                    # 页面结构变化/解析失败（网页端检索特有；不可重试）
     INVALID_OUTPUT = "invalid_output"  # 输出不符合 schema（LLM 特有）
     RECIPIENT_REJECTED = "recipient_rejected"  # 收件人被拒（发送特有）
     SERVER = "server"                  # 对端 5xx
