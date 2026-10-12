@@ -57,7 +57,7 @@
 
 记账语义（`SearchStatsRecorder.record_attempt`）：
 
-- 每次**实际发起的外呼尝试**（含失败；含链接还原跟随跳转）→ `used_today` +1（按日重置，对齐 sending 渠道 `ensure_used_today` 语义）；手动测试同样计数;
+- 每次**渠道调用尝试**（一次 `search()` 调用计一次，含失败；引擎内部形态回退/链接还原跟随跳转不重复计数）→ `used_today` +1（按日重置，对齐 sending 渠道 `ensure_used_today` 语义）；手动测试同样计数（一次测试计一次）;
 - 成功 → `health="healthy"` 且清空 `last_error_kind/at`；
 - 失败 → `health="failing"`，写 `last_error_kind`（`error.kind.value`）与 `last_error_at`；
 - `last_test_result` 语义不变（仅手动测试写明细）；
