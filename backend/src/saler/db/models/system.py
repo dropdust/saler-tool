@@ -43,6 +43,8 @@ class SearchProvider(Base, TimestampMixin):
     health: Mapped[str] = mapped_column(String(20), default="unknown")
     last_test_at: Mapped[datetime | None] = mapped_column()
     last_test_result: Mapped[str | None] = mapped_column(Text)
+    last_error_kind: Mapped[str | None] = mapped_column(String(20))  # 最近失败类别（ErrorKind.value；004）
+    last_error_at: Mapped[datetime | None] = mapped_column()         # 最近失败时间（UTC；004）
 
 
 class AppSetting(Base):
