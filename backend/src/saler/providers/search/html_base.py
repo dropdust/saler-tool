@@ -82,7 +82,12 @@ class HTMLSearchEngine:
         return random.choice(BROWSER_UA_POOL)
 
     def _throttle(self) -> None:
-        """引擎实例级最小间隔 + 0~JITTER_MAX_S 抖动；链接还原等附加请求同池计数。"""
+        """引擎实例级最小间隔 + 0~JITTER_MAX_S 抖动；链接还原等附加请求同池计数。
+
+        `params.interval_s <= 0` = 显式关闭节流（测试与用户显式选择，无抖动）。
+        """
+        if self._interval_s <= 0:
+            return
         now = monotonic()
         if self._last_request_at is not None:
             wait = self._interval_s + random.uniform(0, JITTER_MAX_S) - (now - self._last_request_at)

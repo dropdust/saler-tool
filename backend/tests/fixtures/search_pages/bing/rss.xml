@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>test - Bing</title>
+    <item>
+      <title>Rust 官网</title>
+      <link>https://rust-lang.org/</link>
+      <description>Rust 语言官网</description>
+    </item>
+    <item>
+      <title>Rust 论坛</title>
+      <link>https://users.rust-lang.org/</link>
+      <description>社区论坛 &amp; 问答</description>
+    </item>
+  </channel>
+</rss>
