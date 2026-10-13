@@ -9,7 +9,34 @@
           <el-radio-button value="structure">结构视图</el-radio-button>
           <el-radio-button value="entity">实体视图</el-radio-button>
         </el-radio-group>
-        <el-input v-model="batch" placeholder="批次筛选（可选）" clearable style="width: 170px" />
+        <el-select
+          v-model="batch"
+          data-test="batch-filter"
+          placeholder="批次筛选（可选）"
+          clearable
+          filterable
+          allow-create
+          default-first-option
+          style="width: 180px"
+        >
+          <el-option v-for="item in batchOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-autocomplete
+          v-model="searchText"
+          data-test="node-search"
+          placeholder="搜索节点并定位"
+          clearable
+          :debounce="0"
+          value-key="label"
+          :fetch-suggestions="fetchNodeSuggestions"
+          style="width: 200px"
+          @select="onNodeSelect"
+          @clear="onSearchClear"
+        >
+          <template #default="{ item }">
+            <span>{{ item.label }}</span>
+          </template>
+        </el-autocomplete>
         <el-button type="primary" @click="load">加载</el-button>
       </template>
     </PageHeader>
@@ -45,36 +72,62 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { api } from '../../api/client'
-import type { OverviewPayload, OverviewNode } from '../../api/types'
+import type { OverviewNode, OverviewPayload } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import { NODE_TYPE_LABELS } from '../../constants'
 import { useThemeStore } from '../../stores/theme'
 import { nodeColor, readThemePalette } from '../../theme/palette'
+import { nodeSearchSuggestions, type NodeSuggestion } from './graphSearch'
 
 const themeStore = useThemeStore()
 
 const STRUCTURE_TYPES = ['product_line', 'persona', 'market']
 const ENTITY_TYPES = ['org', 'market']
+const STRUCTURE_SET = new Set<string>(STRUCTURE_TYPES)
+const ENTITY_SET = new Set<string>(ENTITY_TYPES)
 
 const viewMode = ref<'structure' | 'entity'>('structure')
 const batch = ref('')
+const batchOptions = ref<string[]>([])
+const searchText = ref('')
 const loading = ref(false)
 const chartEl = ref<HTMLDivElement>()
 const activeNode = ref<OverviewNode | null>(null)
 const router = useRouter()
 let chart: echarts.ECharts | null = null
-let payload: OverviewPayload = { nodes: [], edges: [] }
+const payload = ref<OverviewPayload>({ nodes: [], edges: [] })
+let renderedNodes: OverviewNode[] = []
+
+function allowedTypes(): Set<string> {
+  return viewMode.value === 'structure' ? STRUCTURE_SET : ENTITY_SET
+}
 
 function colorOf(node: OverviewNode): string {
   return nodeColor(node.counts, readThemePalette())
 }
 
+async function loadBatchOptions() {
+  try {
+    const items = await api.get<string[]>('/seeds/batches')
+    batchOptions.value = Array.isArray(items) ? items : []
+  } catch {
+    // 选项拉取失败不阻断图加载：下拉为空，仍可用 allow-create 手输批次（少见）
+    batchOptions.value = []
+  }
+}
+
 async function load() {
   loading.value = true
   try {
-    payload = await api.get<OverviewPayload>('/graph/overview', {
+    payload.value = await api.get<OverviewPayload>('/graph/overview', {
       batch: batch.value || undefined,
     })
+    // 批次过滤后搜索目标可能已不在图内：清理选中与面板，避免展示陈旧节点
+    const activeId = activeNode.value?.id
+    if (activeId != null && !payload.value.nodes.some((node) => node.id === activeId)) {
+      activeNode.value = null
+      searchText.value = ''
+    }
     renderChart()
   } finally {
     loading.value = false
@@ -88,14 +141,15 @@ function renderChart() {
     chart.on('click', (params: Record<string, any>) => {
       if (params.dataType === 'node' && params.data?.id) {
         const id = Number(params.data.id)
-        activeNode.value = payload.nodes.find((node) => node.id === id) ?? null
+        activeNode.value = payload.value.nodes.find((node) => node.id === id) ?? null
       }
     })
   }
-  const allowed = new Set(viewMode.value === 'structure' ? STRUCTURE_TYPES : ENTITY_TYPES)
-  const nodes = payload.nodes.filter((node) => allowed.has(node.node_type))
+  const allowed = allowedTypes()
+  const nodes = payload.value.nodes.filter((node) => allowed.has(node.node_type))
+  renderedNodes = nodes
   const included = new Set(nodes.map((node) => node.id))
-  const links = payload.edges.filter((edge) => included.has(edge.source) && included.has(edge.target))
+  const links = payload.value.edges.filter((edge) => included.has(edge.source) && included.has(edge.target))
 
   const categories = [...allowed].map((type) => ({ name: NODE_TYPE_LABELS[type] ?? type }))
   const categoryIndex = (type: string) => categories.findIndex((c) => c.name === (NODE_TYPE_LABELS[type] ?? type))
@@ -151,6 +205,73 @@ function renderChart() {
   )
 }
 
+function fetchNodeSuggestions(query: string, callback: (items: NodeSuggestion[]) => void) {
+  callback(nodeSearchSuggestions(payload.value.nodes, query))
+}
+
+// el-autocomplete 的 select 回调参数为宽松 Record（Element Plus 类型口径），此处收窄为建议项
+function onNodeSelect(item: Record<string, unknown>) {
+  const id = typeof item.id === 'number' ? item.id : null
+  const node = id == null ? null : payload.value.nodes.find((candidate) => candidate.id === id) ?? null
+  activeNode.value = node
+  if (!node) return
+  if (!allowedTypes().has(node.node_type)) {
+    // 命中另一视图的节点：自动切换到包含它的视图后定位（market 两视图共有，不切换）
+    viewMode.value = STRUCTURE_SET.has(node.node_type) ? 'structure' : 'entity'
+    renderChart()
+  }
+  locateNode(node.id)
+}
+
+function onSearchClear() {
+  activeNode.value = null
+}
+
+/** 定位票据：新一次定位使旧的按帧重试/校正回调失效。 */
+let locateTicket = 0
+
+/** 搜索定位（T198）：高亮命中节点（邻接聚焦随 emphasis 生效）+ 提示框 + 平移到视口中央。 */
+function locateNode(id: number) {
+  const dataIndex = renderedNodes.findIndex((node) => node.id === id)
+  if (!chart || dataIndex < 0) return
+  chart.dispatchAction({ type: 'downplay', seriesIndex: 0 })
+  chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex })
+  chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex })
+  centerOnNode(dataIndex, ++locateTicket)
+}
+
+interface GraphModelLike {
+  getSeriesByIndex?: (index: number) => {
+    getData: () => { getItemLayout: (index: number) => number[] | undefined }
+    coordinateSystem?: { dataToPoint?: (value: number[]) => number[] }
+  } | undefined
+}
+
+/**
+ * 把节点平移到视口中央：力导向布局逐帧生成，坐标未就绪时按帧重试；
+ * 就位后隔 400ms 校正两次，抵消布局继续收敛带来的漂移。
+ */
+function centerOnNode(dataIndex: number, ticket: number, retries = 0, corrections = 2) {
+  if (!chart || ticket !== locateTicket || retries > 30) return
+  const model = (chart as unknown as { getModel?: () => GraphModelLike }).getModel?.()
+  const seriesModel = model?.getSeriesByIndex?.(0)
+  const layout = seriesModel?.getData().getItemLayout(dataIndex)
+  const point = layout && seriesModel?.coordinateSystem?.dataToPoint?.(layout)
+  if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+    window.requestAnimationFrame(() => centerOnNode(dataIndex, ticket, retries + 1, corrections))
+    return
+  }
+  chart.dispatchAction({
+    type: 'graphRoam',
+    seriesIndex: 0,
+    dx: chart.getWidth() / 2 - point[0],
+    dy: chart.getHeight() / 2 - point[1],
+  })
+  if (corrections > 0) {
+    window.setTimeout(() => centerOnNode(dataIndex, ticket, 0, corrections - 1), 400)
+  }
+}
+
 // 主题切换 → 整图重渲（canvas 不随 CSS 变量自动更新，R5）
 watch(
   () => themeStore.current,
@@ -171,7 +292,7 @@ function onResize() {
 
 onMounted(async () => {
   window.addEventListener('resize', onResize)
-  await load()
+  await Promise.all([loadBatchOptions(), load()])
 })
 
 onBeforeUnmount(() => {

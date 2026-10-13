@@ -124,6 +124,15 @@ def list_seeds(
     return query.order_by(*order)
 
 
+def distinct_batches(db: Session) -> list[str]:
+    """库内 seed.batch 去重精确值（升序）——图谱批次筛选下拉的库内取值源（T198）。
+
+    按存库原值返回（不做折叠/去空白）；空批次不入列。
+    """
+    rows = db.query(Seed.batch).distinct().all()
+    return sorted({row[0] for row in rows if row[0]})
+
+
 def distinct_langs(db: Session) -> list[str]:
     """库内 seed.lang 去重精确值（升序）——语言筛选选项的库内取值源（003 FR-001/006）。
 

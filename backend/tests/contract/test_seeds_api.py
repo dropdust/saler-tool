@@ -210,6 +210,23 @@ class TestSeedLangsEndpoint:
         assert client.get("/api/v1/seeds/langs").json() == ["ar", "ko"]
 
 
+class TestSeedBatchesEndpoint:
+    """T198 契约测试：GET /seeds/batches——库内批次取值（图谱批次筛选下拉的数据源）。"""
+
+    def test_empty_library_returns_empty_list(self, client):
+        assert client.get("/api/v1/seeds/batches").json() == []
+
+    def test_distinct_sorted_exact_values_ignoring_null(self, client):
+        for query, batch in [("q-b2", "b2"), ("q-b1-1", "b1"), ("q-b1-2", "b1"), ("q-none", None)]:
+            resp = client.post("/api/v1/seeds", json={"query": query, "batch": batch})
+            assert resp.status_code == 201, resp.text
+        assert client.get("/api/v1/seeds/batches").json() == ["b1", "b2"]
+
+    def test_new_values_appear_immediately(self, client):
+        client.post("/api/v1/seeds", json={"query": "s-b3", "batch": "b3"})
+        assert client.get("/api/v1/seeds/batches").json() == ["b3"]
+
+
 class TestSeedLangFilter:
     """T182 契约测试（行为锁定）：GET /seeds?lang= 精确筛选与组合（FR-002/003/009）。
 
