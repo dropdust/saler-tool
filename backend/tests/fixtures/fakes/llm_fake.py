@@ -9,7 +9,7 @@ from saler.providers.llm.base import TestResult
 
 
 def default_expansion() -> dict:
-    """一次合理的"知识图谱扩充"输出样例。"""
+    """一次合理的"知识图谱扩充"输出样例（种子为中文母版，机构名保留原文）。"""
     return {
         "nodes": [
             {
@@ -26,13 +26,17 @@ def default_expansion() -> dict:
         ],
         "seeds": [
             {
-                "query": '"Fake Utility Co" contact',
-                "lang": "en",
+                "query": '"Fake Utility Co" 联系方式',
                 "persona": "公用事业",
                 "priority": 1,
                 "rationale": "具名实体精度高",
             },
-            {"query": "power line hardware distributor kenya", "lang": "en", "priority": 2},
+            {
+                "query": "电力金具 五金经销 肯尼亚",
+                "product_line": "电力金具",
+                "market": "肯尼亚",
+                "priority": 2,
+            },
         ],
     }
 

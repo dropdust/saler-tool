@@ -42,41 +42,40 @@ def test_full_seed_flow(client, fake_llm):
     )
     assert manual.status_code == 201
 
-    # 3) AI 扩充（假 Provider，job 化）
+    # 3) AI 扩充（假 Provider，job 化）：产出中文母版候选
     resp = client.post(
         "/api/v1/ai/seeds/expand",
-        json={"description": "电力金具出口", "count": 5, "langs": ["en"], "from_node_ids": [product_line["id"]]},
+        json={"description": "电力金具出口", "count": 5, "from_node_ids": [product_line["id"]]},
     )
     assert resp.status_code == 202
     job = wait_job(client, resp.json()["job_id"])
     assert job["status"] == "completed", job
     assert job["result"]["seeds_created"] == 2
 
-    # AI 产出全部待审核
+    # AI 产出全部待审核，且一律为中文母版（lang=zh），供审核后翻译
     queue = client.get("/api/v1/seeds/review-queue").json()
     assert queue["total"] == 2
+    assert all(item["lang"] == "zh" for item in queue["items"])
 
     # 4) 审核：全部采纳
     ids = [item["id"] for item in queue["items"]]
     client.post("/api/v1/seeds/review", json={"ids": ids, "decision": "approve"})
     assert client.get("/api/v1/seeds/review-queue").json()["total"] == 0
 
-    # 5) 中文种子 → 多语言翻译
-    zh_seed = client.post(
-        "/api/v1/seeds",
-        json={"query": "金具 批发商 肯尼亚", "lang": "zh", "market_id": market["id"]},
-    ).json()
+    # 5) 已审核中文母版 → 目标语言翻译（分类随血缘继承）
     resp = client.post(
-        "/api/v1/ai/seeds/translate", json={"seed_ids": [zh_seed["id"]], "targets": ["en", "ru"]}
+        "/api/v1/ai/seeds/translate", json={"seed_ids": ids, "targets": ["en", "ru"]}
     )
     translated_job = wait_job(client, resp.json()["job_id"])
-    assert translated_job["result"]["created"] == 2
+    assert translated_job["result"]["created"] == 4
+    assert translated_job["result"]["by_lang"] == {"en": 2, "ru": 2}
 
     # 译文同样进入待审核：未采纳前不可导出（先审后发的防线）
     translated_queue = client.get("/api/v1/seeds/review-queue").json()
-    assert translated_queue["total"] == 2
+    assert translated_queue["total"] == 4
+    assert any(item["product_line_id"] == product_line["id"] for item in translated_queue["items"])
     exported_pending_only = client.post("/api/v1/seeds/export", json={"format": "csv"}).json()
-    assert exported_pending_only["count"] == 4
+    assert exported_pending_only["count"] == 3  # 手工 1 + 中文母版 2（已审核）
     client.post(
         "/api/v1/seeds/review",
         json={"ids": [item["id"] for item in translated_queue["items"]], "decision": "approve"},
@@ -84,7 +83,7 @@ def test_full_seed_flow(client, fake_llm):
 
     # 6) 导出执行清单（默认仅已审核）
     exported = client.post("/api/v1/seeds/export", json={"format": "csv"}).json()
-    assert exported["count"] >= 5
+    assert exported["count"] >= 7
     with open(exported["path"], encoding="utf-8-sig") as handle:
         content = handle.read()
     assert "power line hardware kenya" in content

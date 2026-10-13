@@ -23,7 +23,7 @@ class ExpandRequest(BaseModel):
     description: str | None = None
     from_node_ids: list[int] = Field(default_factory=list)
     count: int = 20
-    langs: list[str] = Field(default_factory=list)
+    # 目标语言不在此处：扩充一律产出中文母版，审核后经 /ai/seeds/translate 翻译（FR-012②）
 
 
 class TranslateSeedsRequest(BaseModel):

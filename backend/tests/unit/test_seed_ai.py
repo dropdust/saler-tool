@@ -1,4 +1,4 @@
-"""T028 单元测试：AI 扩充/翻译落库（全部 pending、query 去重、glossary、错误传递）。"""
+"""T028 单元测试：AI 扩充/翻译落库（中文母版、全部 pending、query 去重、glossary、错误传递）。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from saler.core.seeds.ai import run_expansion
 from saler.core.seeds.ai_translate import run_translate_seeds, run_translate_terms
 from saler.db.models import GraphNode, NodeTerm, Seed
 from saler.providers.errors import ErrorKind, ProviderError
-from tests.fixtures.fakes.llm_fake import FakeLLMProvider
+from tests.fixtures.fakes.llm_fake import FakeLLMProvider, default_expansion
 
 
 class _Ctx:
@@ -48,12 +48,39 @@ async def test_expansion_persists_pending_and_dedupes(session_factory):
             assert seed.review_status == "pending"
             assert seed.source == "llm"
             assert seed.batch.startswith("llm-")
-        entity_seed = db.query(Seed).filter_by(query='"Fake Utility Co" contact').one()
+            assert seed.lang == "zh"  # 扩充产出一律中文母版，待审核后翻译
+        entity_seed = db.query(Seed).filter_by(query='"Fake Utility Co" 联系方式').one()
         assert entity_seed.persona_id is not None  # 分类引用已解析
 
     report2 = await run_expansion(_Ctx(), session_factory, FakeLLMProvider(), payload={})
     assert report2["seeds_created"] == 0
     assert report2["skipped"]["seeds"] == 2
+
+
+async def test_expansion_seeds_are_chinese_masters(session_factory):
+    """扩充提示词要求中文母版；模型输出带的 lang 字段被忽略，落库固定 lang=zh（FR-012 ①）。"""
+    provider = FakeLLMProvider(
+        script=[{**default_expansion(), "seeds": [{"query": "金具 经销商 东非", "lang": "en"}]}]
+    )
+    report = await run_expansion(_Ctx(), session_factory, provider, payload={"count": 3})
+    assert report["seeds_created"] == 1
+
+    with session_factory() as db:
+        seed = db.query(Seed).one()
+        assert seed.lang == "zh"
+        assert seed.review_status == "pending"
+
+    prompt = provider.calls[0]["prompt"]
+    assert "中文母版" in prompt
+    assert '"lang"' not in prompt  # 种子结构不再由模型决定语言
+
+
+async def test_expansion_prompt_no_longer_requests_target_langs(session_factory):
+    """目标语言不进扩充提示词：翻译为审核后的独立步骤（FR-012 ②）。"""
+    provider = FakeLLMProvider()
+    await run_expansion(_Ctx(), session_factory, provider, payload={"langs": ["en", "ru"]})
+    prompt = provider.calls[0]["prompt"]
+    assert "种子语言" not in prompt
 
 
 async def test_expansion_provider_error_propagates(session_factory):

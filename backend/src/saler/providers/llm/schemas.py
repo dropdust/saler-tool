@@ -30,8 +30,9 @@ class EdgeCandidate(BaseModel):
 
 
 class SeedCandidate(BaseModel):
+    """扩充候选种子：query 为中文母版检索意图；语言由管线固定为 zh，不由模型决定（FR-012①→②）。"""
+
     query: str
-    lang: str = "en"
     product_line: str | None = None
     persona: str | None = None
     market: str | None = None

@@ -49,17 +49,18 @@ class LLMProvider(Protocol):
 
 **结构化任务 schema（后端内置，版本化）**
 
-- `seed_expansion_v1` —— 知识图谱扩充（FR-012）：
+- `seed_expansion_v1` —— 知识图谱扩充（FR-012①）：
   ```json
   {
     "nodes": [{"node_type": "product_line|persona|market|org", "name": "…",
                "attributes": {}, "confidence": 0.8, "rationale": "…"}],
     "edges": [{"from": "名称", "to": "名称", "relation_type": "product_fit_persona|product_target_market|org_in_market|org_has_persona"}],
-    "seeds": [{"query": "…", "lang": "en", "product_line": "…", "persona": "…",
+    "seeds": [{"query": "中文母版检索意图", "product_line": "…", "persona": "…",
                "market": "…", "priority": 1, "rationale": "…"}]
   }
   ```
-  入库规则：全部以 `review_status=pending` 落库；`seeds` 须先经 `seed.query` 唯一性过滤（FR-010）。
+  入库规则：全部以 `review_status=pending` 落库；`seeds` 须先经 `seed.query` 唯一性过滤（FR-010）；
+  种子 `query` 为中文母版（具名机构实体保留原文），落库 `lang` 固定 `zh`、不由模型决定——翻译为目标语言是审核后的独立步骤（FR-012②，`/ai/seeds/translate`）。
 - `seed_translation_v1` —— 中文种子/词表翻译（FR-012/009）：`{"items": [{"source": "…", "target": "…"}]}`，逐条带语言标注。
 - `content_draft_v1` —— 文案辅助编写：`{"subject": "…", "body_md": "…"}`（变量占位符 `{{…}}` 保留）。
 - `content_translation_v1` —— 母版 → 目标语言版本：`{"subject": "…", "body_md": "…", "glossary_applied": ["…"]}`。

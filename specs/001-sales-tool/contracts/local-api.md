@@ -46,7 +46,7 @@
 |---|---|---|
 | GET/POST | `/llm/providers`；PUT/DELETE `/llm/providers/{id}` | 通道管理式 CRUD；密钥只写不读回 |
 | POST | `/llm/providers/{id}/test` | 连通性测试 → `{ok, detail}`（FR-030） |
-| POST | `/ai/seeds/expand` | 知识图谱扩充种子：`{provider_id?, input:{industry/product/market/from_node_ids}, langs:[...], count}` → job（FR-012） |
+| POST | `/ai/seeds/expand` | 知识图谱扩充种子：`{provider_id?, description?, from_node_ids?, count}` → job；产出一律**中文母版**（lang=zh）待审核，审核后经 `/ai/seeds/translate` 翻译为目标语言（FR-012①→②） |
 | POST | `/ai/seeds/translate` | 中文种子/词表翻译：`{seed_ids|texts, targets:[lang]}` → job（FR-012/009） |
 | POST | `/ai/content/draft` | 中文母版辅助编写：`{theme_id, brief, tone, length?}` → job，产出 draft 版本（FR-038） |
 | POST | `/ai/content/translate` | 母版 → 目标语言版本：`{theme_id, master_variant_id, targets:[lang]}` → job（FR-038） |

@@ -1,6 +1,8 @@
-"""AI 种子扩充（FR-012）：大模型知识图谱能力 → 候选节点/边/种子。
+"""AI 种子扩充（FR-012①）：大模型知识图谱能力 → 候选节点/边/种子。
 
-全部产出以 `source=llm`、`review_status=pending` 落库（必须人工审核后进入执行队列）。
+- 种子一律产出**中文母版**（lang=zh）：语言不由模型决定，审核通过后再经
+  `ai_translate.run_translate_seeds` 翻译为目标语言版本（FR-012②）；
+- 全部产出以 `source=llm`、`review_status=pending` 落库（必须人工审核后进入执行队列）。
 """
 
 from __future__ import annotations
@@ -26,17 +28,19 @@ NODE_TYPE_LABELS = {
     "org": "具名机构实体",
 }
 
+#: 扩充候选种子的固定语言：中文母版（翻译为目标语言是审核后的独立步骤，FR-012②）
+MASTER_LANG = "zh"
+
 
 def build_expansion_prompt(
     *,
     description: str | None,
     node_names_by_type: dict[str, list[str]],
     count: int,
-    langs: list[str],
 ) -> str:
     parts = [
         "你是 B2B 外贸获客的市场调研助手。请基于你的知识图谱能力，"
-        "为下列业务扩张目标市场的『爬虫种子』（搜索引擎检索词）与具名机构实体。",
+        "为下列业务扩张目标市场的『爬虫种子』（检索意图）与具名机构实体。",
     ]
     if description:
         parts.append(f"业务描述：{description.strip()}")
@@ -50,11 +54,14 @@ def build_expansion_prompt(
         "confidence(0-1), rationale}\n"
         "- edges[]: {from(节点名), to(节点名), relation_type: product_fit_persona|"
         "product_target_market|org_in_market|org_has_persona}\n"
-        "- seeds[]: {query(检索词), lang, product_line(节点名,可选), persona(节点名,可选), "
+        "- seeds[]: {query(中文检索意图), product_line(节点名,可选), persona(节点名,可选), "
         "market(节点名,可选), priority(1-3), rationale}\n"
-        f"要求：seeds 约 {count} 条；org 优先列举真实存在的买方组织（各国电网公司、输配电运营商、"
-        "EPC 总包、电气/紧固件经销商、展会与行业协会等）；"
-        f"种子语言：{', '.join(langs) if langs else '以英语为主'}。"
+        f"要求：seeds 约 {count} 条，query 一律为中文母版表述（如「电力金具 电气承包 肯尼亚」），"
+        "表达检索意图即可，勿堆砌英文关键词；"
+        "具名机构实体的 query 为「\"机构名\" 联系方式」形式，机构名保留原文、不翻译；"
+        "org 优先列举真实存在的买方组织（各国电网公司、输配电运营商、EPC 总包、"
+        "电气/紧固件经销商、展会与行业协会等）。"
+        "中文母版经人工审核后由系统翻译为各目标语言版本。"
     )
     return "\n".join(parts)
 
@@ -69,7 +76,6 @@ async def run_expansion(
     description = payload.get("description")
     from_node_ids = payload.get("from_node_ids") or []
     count = int(payload.get("count") or 20)
-    langs = payload.get("langs") or []
 
     with session_factory() as db:
         names_by_type: dict[str, list[str]] = {k: [] for k in NODE_TYPE_LABELS}
@@ -89,7 +95,7 @@ async def run_expansion(
                     names_by_type[node_type].append(row.name)
 
     prompt = build_expansion_prompt(
-        description=description, node_names_by_type=names_by_type, count=count, langs=langs
+        description=description, node_names_by_type=names_by_type, count=count
     )
     ctx.progress(phase="calling_llm")
     ctx.log("调用大模型进行知识图谱扩充（结果将进入待审核）…")
@@ -164,7 +170,7 @@ async def run_expansion(
                 seed_service.create_seed(
                     db,
                     query=query,
-                    lang=(cand.get("lang") or "en").strip(),
+                    lang=MASTER_LANG,
                     priority=int(cand.get("priority") or 2),
                     product_line_id=name_to_id.get((cand.get("product_line") or "").strip()),
                     persona_id=name_to_id.get((cand.get("persona") or "").strip()),
@@ -181,7 +187,7 @@ async def run_expansion(
             db,
             "llm",
             f"AI 扩充：新增节点 {report['nodes_created']}、关系 {report['edges_created']}、"
-            f"种子 {report['seeds_created']}（全部待审核）",
+            f"中文母版种子 {report['seeds_created']}（全部待审核）",
             ref_type="job",
             ref_id=ctx.job_id,
             payload=report,

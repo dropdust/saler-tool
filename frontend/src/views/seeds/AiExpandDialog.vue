@@ -30,31 +30,15 @@
           />
         </el-select>
       </el-form-item>
-      <el-row :gutter="16">
-        <el-col :span="8">
-          <el-form-item label="候选数量">
-            <el-input-number v-model="form.count" :min="5" :max="200" :step="5" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="16">
-          <el-form-item label="目标语言">
-            <el-select v-model="form.langs" multiple style="width: 100%">
-              <el-option
-                v-for="lang in LANGS"
-                :key="lang.code"
-                :value="lang.code"
-                :label="`${lang.label}（${lang.code}）`"
-              />
-            </el-select>
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <el-form-item label="候选数量">
+        <el-input-number v-model="form.count" :min="5" :max="200" :step="5" />
+      </el-form-item>
       <el-form-item>
         <el-alert
           type="info"
           :closable="false"
           show-icon
-          title="调用前提示：以上描述与所选节点名称将发送至已配置的大模型服务；产出全部进入「待审核」，采纳后方可执行。"
+          title="调用前提示：以上描述与所选节点名称将发送至已配置的大模型服务；产出为中文母版候选，全部进入「待审核」；采纳后在种子列表勾选中文种子，用「AI 翻译」生成各目标语言版本。"
         />
       </el-form-item>
       <el-form-item v-if="progressText" label="进度">
@@ -67,7 +51,7 @@
         <el-alert
           type="success"
           :closable="false"
-          :title="`新增：节点 ${summary.nodes_created ?? 0}、关系 ${summary.edges_created ?? 0}、种子 ${summary.seeds_created ?? 0}（均待审核）`"
+          :title="`新增：节点 ${summary.nodes_created ?? 0}、关系 ${summary.edges_created ?? 0}、中文母版种子 ${summary.seeds_created ?? 0}（均待审核）`"
         />
       </el-form-item>
     </el-form>
@@ -86,7 +70,7 @@ import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
 import { watchJob } from '../../api/jobs'
 import type { GraphNode, Paginated } from '../../api/types'
-import { LANGS, NODE_TYPE_LABELS } from '../../constants'
+import { NODE_TYPE_LABELS } from '../../constants'
 
 const visible = ref(false)
 const emit = defineEmits<{ done: [] }>()
@@ -99,7 +83,6 @@ const form = ref({
   description: '',
   from_node_ids: [] as number[],
   count: 20,
-  langs: ['en'] as string[],
 })
 
 async function open() {
