@@ -28,6 +28,48 @@ def _frontend_dist() -> Path:
     return Path(__file__).resolve().parents[3].parent / "frontend" / "dist"
 
 
+# PyInstaller pyi_rth_gtk 钩子写入的 GTK/Pango 定位变量（取值 = 包内 _internal/）
+_BUNDLE_GTK_ENV_VARS = (
+    "GTK_EXE_PREFIX",
+    "GTK_DATA_PREFIX",
+    "GTK_PATH",
+    "PANGO_LIBDIR",
+    "PANGO_SYSCONFDIR",
+)
+
+
+def drop_bundle_gtk_env() -> list[str]:
+    """移除指向包内目录的 GTK/Pango 定位变量，恢复系统 GTK 模块解析（T197）。
+
+    根因：PyInstaller 的 pyi_rth_gtk 运行时钩子把上述变量都设为 sys._MEIPASS
+    （_internal/），但冻结包并不携带 GTK 模块目录（lib/gtk-3.0/.../immodules）。
+    Ubuntu 的 GTK3 依据 GTK_EXE_PREFIX 推导模块根（<prefix>/lib/gtk-3.0/3.0.0/
+    immodules），于是 GTK 只搜包内不存在的路径——输入法模块（im-wayland.so）
+    永远加载不了，中文输入全部失效（同源症状还有 "Failed to load module
+    \"canberra-gtk-module\""）。移除这些变量后 GTK 回退到编译期系统路径，
+    输入法模块从 /usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules 正常加载。
+
+    只移除「取值指向包内目录」的变量（整个取值含任一路径项落在 _MEIPASS 即移除）；
+    非冻结运行（无 _MEIPASS）或用户自设的其它取值一律不动。返回被移除的变量名。
+    """
+    import sys
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return []
+    bundle = os.path.abspath(meipass)
+    removed: list[str] = []
+    for var in _BUNDLE_GTK_ENV_VARS:
+        value = os.environ.get(var)
+        if not value:
+            continue
+        parts = [os.path.abspath(part) for part in value.split(os.pathsep) if part]
+        if any(part == bundle or part.startswith(bundle + os.sep) for part in parts):
+            os.environ.pop(var, None)
+            removed.append(var)
+    return removed
+
+
 def _icon_path() -> str | None:
     """窗口图标（chanzi.png，T176）；缺失时返回 None——不阻断启动。
 
@@ -119,6 +161,8 @@ def _build_app(data_dir: Path):
 
 
 def main(argv: list[str] | None = None) -> int:
+    drop_bundle_gtk_env()  # T197：必须在任何 GTK/WebView 初始化之前恢复系统模块解析
+
     import argparse
 
     from saler.desktop.diagnostics import check_desktop_environment, friendly_startup_error
