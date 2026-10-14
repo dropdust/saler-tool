@@ -92,14 +92,22 @@ describe('jobCenter store · 数据层', () => {
     const old = jobRow({
       id: 9,
       status: 'completed',
-      finished_at: '2026-10-10T00:00:00+00:00', // 4 天前 → 窗口外
+      // 朴素 UTC 25 小时前 → 窗口外
+      finished_at: new Date(Date.now() - 25 * 3600_000).toISOString().replace('Z', ''),
+    })
+    const mid = jobRow({
+      id: 7,
+      status: 'completed',
+      // 朴素 UTC 20 小时前 → 窗口内（若按本地时区误读会显得更旧而被错误排除）
+      finished_at: new Date(Date.now() - 20 * 3600_000).toISOString().replace('Z', ''),
     })
     const fresh = jobRow({
       id: 8,
       status: 'completed',
-      finished_at: new Date(Date.now() - 3600_000).toISOString(),
+      // 朴素 UTC（无时区后缀，服务端实际形状）——1 小时前应保留
+      finished_at: new Date(Date.now() - 3600_000).toISOString().replace('Z', ''),
     })
-    stubLists([jobRow({ id: 5 })], [old, fresh])
+    stubLists([jobRow({ id: 5 })], [old, mid, fresh])
     const store = await freshStore()
 
     await store.init()
@@ -113,7 +121,7 @@ describe('jobCenter store · 数据层', () => {
       page_size: 20,
     })
     expect(Object.keys(store.activeJobs)).toEqual(['5'])
-    expect(store.recentJobs.map((j) => j.id)).toEqual([8])
+    expect(store.recentJobs.map((j) => j.id)).toEqual([7, 8])
   })
 
   it('init 对每个活跃任务建立订阅（URL 与数量）', async () => {

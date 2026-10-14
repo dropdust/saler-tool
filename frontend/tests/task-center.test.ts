@@ -26,7 +26,8 @@ function jobRow(overrides: Record<string, unknown> = {}) {
     ref_type: 'crawl_job',
     ref_id: 1,
     created_at: '2026-10-14T01:00:00+00:00',
-    started_at: new Date(Date.now() - 65_000).toISOString(),
+    // 服务端时间戳为朴素 UTC（无时区后缀，如 2026-10-14T05:45:34.74）——按 UTC 解析
+    started_at: new Date(Date.now() - 65_000).toISOString().replace('Z', ''),
     finished_at: null,
     can_pause: true,
     rerunnable: true,

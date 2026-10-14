@@ -85,7 +85,7 @@ import { Loading } from '@element-plus/icons-vue'
 import StatusTag from './StatusTag.vue'
 import { jobRoute } from '../../constants'
 import type { JobPayload } from '../../api/types'
-import { useJobCenterStore } from '../../stores/jobCenter'
+import { parseServerTime, useJobCenterStore } from '../../stores/jobCenter'
 
 const store = useJobCenterStore()
 const router = useRouter()
@@ -109,9 +109,9 @@ function formatDuration(ms: number): string {
 }
 
 function elapsed(job: JobPayload): string {
-  if (!job.started_at) return ''
-  const start = Date.parse(job.started_at)
-  const end = job.finished_at ? Date.parse(job.finished_at) : now.value
+  const start = parseServerTime(job.started_at)
+  if (start === null) return ''
+  const end = parseServerTime(job.finished_at) ?? now.value
   return formatDuration(end - start)
 }
 

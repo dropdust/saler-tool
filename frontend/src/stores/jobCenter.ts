@@ -56,6 +56,18 @@ function isTerminal(status: string | null | undefined): boolean {
   return !!status && TERMINAL_STATUSES.includes(status)
 }
 
+/**
+ * 服务端时间戳解析：SQLite 朴素 UTC 的 ISO 串可能无时区后缀
+ * （如 `2026-10-14T05:45:34.740728`）——JS `Date.parse` 默认按本地时区解释，
+ * 会造成耗时显示与 24h 窗口整体偏移一个时区差；无后缀一律按 UTC 解析。
+ */
+export function parseServerTime(value: string | null | undefined): number | null {
+  if (!value) return null
+  const hasZone = /([zZ]|[+-]\d{2}:\d{2})$/.test(value)
+  const timestamp = Date.parse(hasZone ? value : `${value}Z`)
+  return Number.isNaN(timestamp) ? null : timestamp
+}
+
 export const useJobCenterStore = defineStore('jobCenter', {
   state: () => ({
     activeJobs: {} as Record<number, JobPayload>,
@@ -96,7 +108,10 @@ export const useJobCenterStore = defineStore('jobCenter', {
       }
       const cutoff = Date.now() - RECENT_WINDOW_MS
       this.recentJobs = recent.items
-        .filter((job) => !job.finished_at || Date.parse(job.finished_at) >= cutoff)
+        .filter((job) => {
+          const finished = parseServerTime(job.finished_at)
+          return finished === null || finished >= cutoff
+        })
         .slice(0, RECENT_LIMIT)
     },
 
@@ -210,7 +225,9 @@ export const useJobCenterStore = defineStore('jobCenter', {
 
     /** 任务控制：pause/resume 以服务端回执状态落位；cancel 本地收尾（SSE 迟到经去重不重复）。 */
     async control(jobId: number, action: 'pause' | 'resume' | 'cancel') {
-      const resp = await api.post<{ ok: boolean; status: string }>(`/jobs/${jobId}/${action}`)
+      const resp = await api.post<{ ok: boolean; status: JobPayload['status'] }>(
+        `/jobs/${jobId}/${action}`,
+      )
       const job = this.activeJobs[jobId]
       if (action === 'cancel') {
         this._suppressNotification(jobId)
