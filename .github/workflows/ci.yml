@@ -26,11 +26,13 @@ jobs:
         working-directory: backend
         shell: bash
         run: |
-          # 失败时把 pytest 输出尾部同步为注解/摘要（公开仓库原始日志匿名不可读）
+          # 失败时把 pytest 输出同步为注解/摘要（公开仓库原始日志匿名不可读）。
+          # 注解上限 10 条/步骤：优先发 FAILED 行（测试名）+ 日志尾部 3 行，共 ≤8 条
           if ! uv run pytest -q > /tmp/pytest.log 2>&1; then
             tail -60 /tmp/pytest.log
-            { echo "### pytest 失败日志（尾部）"; echo '```'; tail -40 /tmp/pytest.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-            tail -25 /tmp/pytest.log | while IFS= read -r line; do echo "::error::pytest: $line"; done
+            { echo "### pytest 失败摘要"; echo '```'; grep -E "^(FAILED|ERROR)" /tmp/pytest.log | head -20; tail -10 /tmp/pytest.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+            grep -E "^(FAILED|ERROR)" /tmp/pytest.log | head -5 | while IFS= read -r line; do echo "::error::pytest: $line"; done
+            tail -3 /tmp/pytest.log | while IFS= read -r line; do echo "::error::pytest(尾): $line"; done
             exit 1
           fi
           tail -3 /tmp/pytest.log
