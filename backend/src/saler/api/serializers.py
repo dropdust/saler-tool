@@ -49,6 +49,28 @@ def log_to_dict(entry) -> dict[str, Any]:
     }
 
 
+def llm_call_to_dict(row) -> dict[str, Any]:
+    """LLM 调用明细（含完整输入/输出，供质量分析；密钥从不进入此处）。"""
+    return {
+        "id": row.id,
+        "ts": iso(row.ts),
+        "job_id": row.job_id,
+        "call_index": row.call_index,
+        "phase": row.phase,
+        "operation": row.operation,
+        "provider": row.provider,
+        "model": row.model,
+        "attempt": row.attempt,
+        "ok": row.ok,
+        "error_kind": row.error_kind,
+        "error_detail": row.error_detail,
+        "request_messages": row.request_messages,
+        "response_text": row.response_text,
+        "latency_ms": row.latency_ms,
+        "usage": row.usage,
+    }
+
+
 def node_to_dict(node) -> dict[str, Any]:
     return {
         "id": node.id,
@@ -348,7 +370,9 @@ def campaign_round_to_dict(row) -> dict[str, Any]:
     }
 
 
-def send_record_to_dict(row, *, company_name: str | None = None, channel_name: str | None = None) -> dict[str, Any]:
+def send_record_to_dict(
+    row, *, company_name: str | None = None, channel_name: str | None = None
+) -> dict[str, Any]:
     return {
         "id": row.id,
         "campaign_id": row.campaign_id,

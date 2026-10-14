@@ -44,7 +44,7 @@ class SearchProvider(Base, TimestampMixin):
     last_test_at: Mapped[datetime | None] = mapped_column()
     last_test_result: Mapped[str | None] = mapped_column(Text)
     last_error_kind: Mapped[str | None] = mapped_column(String(20))  # 最近失败类别（ErrorKind.value；004）
-    last_error_at: Mapped[datetime | None] = mapped_column()         # 最近失败时间（UTC；004）
+    last_error_at: Mapped[datetime | None] = mapped_column()  # 最近失败时间（UTC；004）
 
 
 class AppSetting(Base):
@@ -68,6 +68,34 @@ class OperationLog(Base):
     payload: Mapped[dict | None] = mapped_column()
 
     __table_args__ = (Index("ix_operation_log_ref", "ref_type", "ref_id", "ts"),)
+
+
+class LlmCall(Base):
+    """LLM 调用明细：逐次尝试的输入/原始输出/修复链/耗时/用量（供质量与能力分析）。
+
+    - `call_index`：同一任务内第几次模型调用（多语言循环逐语言一次）；
+    - `attempt`：该次调用内的第几次尝试（>1 为修复重试）；
+    - `phase`：任务层标注的调用上下文（如 `lang:en`），可空。
+    """
+
+    __tablename__ = "llm_call"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    job_id: Mapped[int | None] = mapped_column(index=True)  # 无 FK：观测表随任务清理策略滚动
+    call_index: Mapped[int] = mapped_column(default=1)
+    phase: Mapped[str | None] = mapped_column(String(50))
+    operation: Mapped[str] = mapped_column(String(40), index=True)
+    provider: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    attempt: Mapped[int] = mapped_column(default=1)
+    ok: Mapped[bool] = mapped_column(default=False)
+    error_kind: Mapped[str | None] = mapped_column(String(30))
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    request_messages: Mapped[list] = mapped_column(default=list)
+    response_text: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int | None] = mapped_column()
+    usage: Mapped[dict | None] = mapped_column()
 
 
 class Job(Base, TimestampMixin):

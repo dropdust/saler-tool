@@ -1,10 +1,16 @@
-"""假 LLM Provider：脚本化输出，离线契约测试用。"""
+"""假 LLM Provider：脚本化输出，离线契约测试用。
+
+支持 `on_attempt` 逐次尝试回调（与真实适配器同契约）：任务层据此写入 llm_call 明细。
+"""
 
 from __future__ import annotations
 
+import json
 from collections import deque
+from collections.abc import Callable
 from typing import Any
 
+from saler.providers.errors import ProviderError
 from saler.providers.llm.base import TestResult
 
 
@@ -21,9 +27,7 @@ def default_expansion() -> dict:
             },
             {"node_type": "persona", "name": "公用事业", "attributes": {}, "confidence": 0.9},
         ],
-        "edges": [
-            {"from": "Fake Utility Co", "to": "公用事业", "relation_type": "org_has_persona"}
-        ],
+        "edges": [{"from": "Fake Utility Co", "to": "公用事业", "relation_type": "org_has_persona"}],
         "seeds": [
             {
                 "query": '"Fake Utility Co" 联系方式',
@@ -43,11 +47,43 @@ def default_expansion() -> dict:
 
 class FakeLLMProvider:
     type_key = "fake"
+    provider_name = "fake"
+    model = "fake-model"
 
     def __init__(self, script: list[Any] | None = None) -> None:
         self.script: deque[Any] = deque(script or [])
         self.calls: list[dict] = []
         self.available = True
+
+    def _emit(
+        self,
+        on_attempt: Callable[[dict], None] | None,
+        *,
+        messages: list[dict],
+        response_text: str | None,
+        error: Exception | None = None,
+    ) -> None:
+        if on_attempt is None:
+            return
+        error_kind = (
+            error.kind.value
+            if isinstance(error, ProviderError)
+            else (type(error).__name__ if error is not None else None)
+        )
+        on_attempt(
+            {
+                "provider": self.provider_name,
+                "model": self.model,
+                "attempt": 1,
+                "messages": [dict(m) for m in messages],
+                "response_text": response_text,
+                "ok": error is None,
+                "error_kind": error_kind,
+                "error_detail": str(error) if error is not None else None,
+                "latency_ms": 1,
+                "usage": None,
+            }
+        )
 
     def test_connection(self) -> TestResult:
         return TestResult(ok=self.available, detail="fake ok", models=["fake-model"])
@@ -60,11 +96,19 @@ class FakeLLMProvider:
         system: str | None = None,
         max_repair_attempts: int = 2,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> dict:
         self.calls.append({"prompt": prompt, "schema": schema})
         item = self.script.popleft() if self.script else default_expansion()
+        messages = [{"role": "user", "content": prompt}]
         if isinstance(item, Exception):
+            self._emit(on_attempt, messages=messages, response_text=None, error=item)
             raise item
+        self._emit(
+            on_attempt,
+            messages=messages,
+            response_text=json.dumps(item, ensure_ascii=False),
+        )
         return item
 
     def translate(
@@ -75,9 +119,16 @@ class FakeLLMProvider:
         target_lang: str,
         glossary: dict[str, str] | None = None,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> list[str]:
         self.calls.append({"translate": list(items), "target": target_lang, "glossary": glossary})
-        return [f"[{target_lang}] {item}" for item in items]
+        out = [f"[{target_lang}] {item}" for item in items]
+        self._emit(
+            on_attempt,
+            messages=[{"role": "user", "content": "\n".join(items)}],
+            response_text=json.dumps({"items": out}, ensure_ascii=False),
+        )
+        return out
 
     def complete(self, *, prompt: str, system: str | None = None, timeout_s: float = 120) -> str:
         return "fake-complete"

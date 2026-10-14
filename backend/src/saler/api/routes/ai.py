@@ -10,12 +10,33 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from saler.api.deps import get_session
+from saler.api.serializers import llm_call_to_dict
 from saler.core.content.ai import run_content_draft, run_content_translate
 from saler.core.llm_utils import resolve_llm_provider
 from saler.core.seeds.ai import run_expansion
 from saler.core.seeds.ai_translate import run_translate_seeds, run_translate_terms
+from saler.providers.llm import call_log
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.get("/calls")
+def list_llm_calls(
+    job_id: int | None = None,
+    operation: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_session),
+) -> dict:
+    """LLM 调用明细：逐次尝试的输入/输出/修复链/耗时/用量（新→旧）。"""
+    total, rows = call_log.list_calls(
+        db,
+        job_id=job_id,
+        operation=operation,
+        limit=max(1, min(limit, 200)),
+        offset=max(0, offset),
+    )
+    return {"total": total, "items": [llm_call_to_dict(row) for row in rows]}
 
 
 class ExpandRequest(BaseModel):

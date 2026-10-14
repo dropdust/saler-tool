@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -27,6 +28,7 @@ class LLMProvider(Protocol):
         system: str | None = None,
         max_repair_attempts: int = 2,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> dict: ...
 
     def translate(
@@ -37,6 +39,7 @@ class LLMProvider(Protocol):
         target_lang: str,
         glossary: dict[str, str] | None = None,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> list[str]: ...
 
     def complete(self, *, prompt: str, system: str | None = None, timeout_s: float = 120) -> str: ...

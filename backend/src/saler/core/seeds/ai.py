@@ -17,7 +17,7 @@ from saler.core.graph import service as graph_service
 from saler.core.seeds import service as seed_service
 from saler.db.models import GraphNode, Seed
 from saler.jobs.engine import JobContext
-from saler.providers.llm import telemetry
+from saler.providers.llm import call_log, telemetry
 from saler.providers.llm.schemas import SEED_EXPANSION_V1_SCHEMA
 from saler.services.operation_log import log_op
 
@@ -99,8 +99,14 @@ async def run_expansion(
     )
     ctx.progress(phase="calling_llm")
     ctx.log("调用大模型进行知识图谱扩充（结果将进入待审核）…")
+    recorder = call_log.make_call_recorder(
+        session_factory, job_id=ctx.job_id, operation="seed_expand"
+    )
     data = await asyncio.to_thread(
-        provider.generate_structured, prompt=prompt, schema=SEED_EXPANSION_V1_SCHEMA
+        provider.generate_structured,
+        prompt=prompt,
+        schema=SEED_EXPANSION_V1_SCHEMA,
+        on_attempt=recorder,
     )
     await ctx.checkpoint()
 

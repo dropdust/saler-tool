@@ -16,17 +16,13 @@ from saler.core.graph import service as graph_service
 from saler.core.seeds import service as seed_service
 from saler.db.models import GraphNode, NodeTerm, Seed
 from saler.jobs.engine import JobContext
-from saler.providers.llm import telemetry
+from saler.providers.llm import call_log, telemetry
 from saler.services.operation_log import log_op
 
 
 def _glossary_for(db: Session, targets: list[str]) -> dict[str, dict[str, str]]:
     """目标语言术语表：节点中文名 → 该语言词条（用于翻译一致性）。"""
-    rows = (
-        db.query(NodeTerm)
-        .filter(NodeTerm.lang.in_(targets), NodeTerm.review_status != "rejected")
-        .all()
-    )
+    rows = db.query(NodeTerm).filter(NodeTerm.lang.in_(targets), NodeTerm.review_status != "rejected").all()
     node_names = {node.id: node.name for node in db.query(GraphNode).all()}
     out: dict[str, dict[str, str]] = {}
     for term in rows:
@@ -53,24 +49,26 @@ async def run_translate_seeds(
         if not seeds:
             raise ValidationFailed("未找到任何种子")
         seed_info = [
-            (s.id, s.query, s.lang, s.product_line_id, s.persona_id, s.market_id, s.priority)
-            for s in seeds
+            (s.id, s.query, s.lang, s.product_line_id, s.persona_id, s.market_id, s.priority) for s in seeds
         ]
         source_lang = "zh" if any((s.lang or "").startswith("zh") for s in seeds) else (seeds[0].lang or "zh")
         glossary = _glossary_for(db, targets)
 
     report: dict = {"created": 0, "skipped": 0, "by_lang": {}}
     batch_date = datetime.now(UTC).strftime("%Y%m%d")
+    recorder = call_log.make_call_recorder(session_factory, job_id=ctx.job_id, operation="seed_translate")
     for lang in targets:
         await ctx.checkpoint()
         texts = [row[1] for row in seed_info]
         ctx.progress(phase=f"translating:{lang}", total=len(texts))
+        recorder.phase = f"lang:{lang}"
         translated = await asyncio.to_thread(
             provider.translate,
             items=texts,
             source_lang=source_lang,
             target_lang=lang,
             glossary=glossary.get(lang),
+            on_attempt=recorder,
         )
         created = skipped = 0
         with session_factory() as db:
@@ -132,14 +130,17 @@ async def run_translate_terms(
         node_info = [(n.id, n.name) for n in nodes]
 
     report: dict = {"created": 0, "skipped": 0, "by_lang": {}}
+    recorder = call_log.make_call_recorder(session_factory, job_id=ctx.job_id, operation="term_translate")
     for lang in targets:
         await ctx.checkpoint()
         ctx.progress(phase=f"translating:{lang}", total=len(node_info))
+        recorder.phase = f"lang:{lang}"
         translated = await asyncio.to_thread(
             provider.translate,
             items=[row[1] for row in node_info],
             source_lang="zh",
             target_lang=lang,
+            on_attempt=recorder,
         )
         created = skipped = 0
         with session_factory() as db:

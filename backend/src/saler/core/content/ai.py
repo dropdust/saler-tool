@@ -14,25 +14,17 @@ from saler.core.content import service as content_service
 from saler.core.errors import ValidationFailed
 from saler.db.models import ContentVariant, GraphNode, NodeTerm
 from saler.jobs.engine import JobContext
-from saler.providers.llm import telemetry
+from saler.providers.llm import call_log, telemetry
 from saler.providers.llm.schemas import CONTENT_DRAFT_V1_SCHEMA, CONTENT_TRANSLATION_V1_SCHEMA
 from saler.services.operation_log import log_op
 
 
 def _master_variant(db: Session, theme_id: int, master_lang: str) -> ContentVariant | None:
-    return (
-        db.query(ContentVariant)
-        .filter_by(theme_id=theme_id, lang=master_lang)
-        .first()
-    )
+    return db.query(ContentVariant).filter_by(theme_id=theme_id, lang=master_lang).first()
 
 
 def _glossary(db: Session, targets: list[str]) -> dict[str, dict[str, str]]:
-    rows = (
-        db.query(NodeTerm)
-        .filter(NodeTerm.lang.in_(targets), NodeTerm.review_status != "rejected")
-        .all()
-    )
+    rows = db.query(NodeTerm).filter(NodeTerm.lang.in_(targets), NodeTerm.review_status != "rejected").all()
     node_names = {node.id: node.name for node in db.query(GraphNode).all()}
     out: dict[str, dict[str, str]] = {}
     for term in rows:
@@ -42,14 +34,12 @@ def _glossary(db: Session, targets: list[str]) -> dict[str, dict[str, str]]:
     return out
 
 
-def _build_draft_prompt(
-    *, content_type: str, brief: str, tone: str | None, language: str
-) -> str:
+def _build_draft_prompt(*, content_type: str, brief: str, tone: str | None, language: str) -> str:
     return (
         f"你是资深外贸销售文案专家。请为下列业务撰写一条{content_type}（语言：{language}）文案。\n"
         f"业务要点：{brief}\n"
         f"语气：{tone or '专业、克制、以价值为先'}。\n"
-        "输出 JSON：{\"subject\": \"主题行（如适用）\", \"body_md\": \"Markdown 正文\"}。\n"
+        '输出 JSON：{"subject": "主题行（如适用）", "body_md": "Markdown 正文"}。\n'
         "要求：正文可使用 {{company_name}} 之类的变量占位符（收件人维度个性化）；"
         "不要编造具体价格与交期；落款处使用 {{signature}} 占位。"
     )
@@ -94,8 +84,12 @@ async def run_content_draft(
     )
     ctx.progress(phase="calling_llm")
     ctx.log("大模型正在起草中文母版…")
+    recorder = call_log.make_call_recorder(session_factory, job_id=ctx.job_id, operation="content_draft")
     data = await asyncio.to_thread(
-        provider.generate_structured, prompt=prompt, schema=CONTENT_DRAFT_V1_SCHEMA
+        provider.generate_structured,
+        prompt=prompt,
+        schema=CONTENT_DRAFT_V1_SCHEMA,
+        on_attempt=recorder,
     )
     await ctx.checkpoint()
     with session_factory() as db:
@@ -163,9 +157,11 @@ async def run_content_translate(
         glossary = _glossary(db, targets)
 
     report: dict = {"created": [], "updated": []}
+    recorder = call_log.make_call_recorder(session_factory, job_id=ctx.job_id, operation="content_translate")
     for lang in targets:
         await ctx.checkpoint()
         ctx.progress(phase=f"translating:{lang}")
+        recorder.phase = f"lang:{lang}"
         prompt = _build_translate_prompt(
             target_lang=lang,
             subject=base_subject,
@@ -173,15 +169,14 @@ async def run_content_translate(
             glossary=glossary.get(lang),
         )
         data = await asyncio.to_thread(
-            provider.generate_structured, prompt=prompt, schema=CONTENT_TRANSLATION_V1_SCHEMA
+            provider.generate_structured,
+            prompt=prompt,
+            schema=CONTENT_TRANSLATION_V1_SCHEMA,
+            on_attempt=recorder,
         )
         with session_factory() as db:
             telemetry.record_from_provider(db, provider, operation="content_translate")
-            existing = (
-                db.query(ContentVariant)
-                .filter_by(theme_id=theme_id, lang=lang)
-                .first()
-            )
+            existing = db.query(ContentVariant).filter_by(theme_id=theme_id, lang=lang).first()
             if existing is not None:
                 content_service.update_variant_content(
                     db,

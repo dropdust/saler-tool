@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -69,9 +70,7 @@ def extract_json_block(text: str) -> Any:
                     return json.loads(t[start : end + 1])
                 except json.JSONDecodeError:
                     continue
-    raise ProviderError(
-        ErrorKind.INVALID_OUTPUT, "模型输出不是有效 JSON", detail=(text or "")[:500]
-    )
+    raise ProviderError(ErrorKind.INVALID_OUTPUT, "模型输出不是有效 JSON", detail=(text or "")[:500])
 
 
 def map_openai_error(exc: Exception, *, provider: str) -> ProviderError:
@@ -99,6 +98,21 @@ def map_openai_error(exc: Exception, *, provider: str) -> ProviderError:
     return ProviderError(ErrorKind.NETWORK, f"{type(exc).__name__}: {exc}", provider=provider)
 
 
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _usage_to_dict(usage: Any) -> dict | None:
+    """openai SDK usage（pydantic 模型）→ dict（供明细落库）；未知形态返回 None。"""
+    if usage is None:
+        return None
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump()
+    if isinstance(usage, dict):
+        return dict(usage)
+    return None
+
+
 class OpenAICompatibleProvider:
     type_key = "openai_compatible"
 
@@ -120,6 +134,8 @@ class OpenAICompatibleProvider:
         self.provider_name = provider_name
         #: 最近一次 generate_structured 的调用统计（供任务层遥测记录，T137）
         self.last_stats: dict | None = None
+        #: 最近一次 _chat 的 token 用量（openai SDK usage 的 dict 形式，可能为 None）
+        self._last_usage: dict | None = None
         self._api_key = api_key
         self._client_factory = client_factory or self._default_client_factory
 
@@ -144,11 +160,45 @@ class OpenAICompatibleProvider:
             if response_format is not None:
                 kwargs["response_format"] = response_format
             resp = client.chat.completions.create(**kwargs)
+            self._last_usage = _usage_to_dict(getattr(resp, "usage", None))
             return resp.choices[0].message.content or ""
         except ProviderError:
             raise
         except Exception as exc:
             raise map_openai_error(exc, provider=self.provider_name) from exc
+
+    def _emit_attempt(
+        self,
+        on_attempt: Callable[[dict], None] | None,
+        *,
+        attempt: int,
+        messages: list[dict[str, str]],
+        response_text: str | None,
+        ok: bool,
+        error_kind: str | None,
+        error_detail: str | None,
+        latency_ms: int,
+        usage: dict | None,
+    ) -> None:
+        """把一次尝试的完整输入/输出交给记录方（llm_call 明细）；观测失败不影响调用。"""
+        if on_attempt is None:
+            return
+        payload = {
+            "provider": self.provider_name,
+            "model": self.model,
+            "attempt": attempt,
+            "messages": [dict(m) for m in messages],
+            "response_text": response_text,
+            "ok": ok,
+            "error_kind": error_kind,
+            "error_detail": error_detail,
+            "latency_ms": latency_ms,
+            "usage": usage,
+        }
+        try:
+            on_attempt(payload)
+        except Exception:  # noqa: BLE001 - 观测失败不得中断模型调用
+            logger.warning("LLM 调用明细记录失败（忽略，不影响本次调用）")
 
     # ---- 契约方法 ----
     def test_connection(self) -> TestResult:
@@ -185,10 +235,11 @@ class OpenAICompatibleProvider:
         system: str | None = None,
         max_repair_attempts: int = 2,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> dict:
         sys_text = system or (
             "你只输出严格 JSON（json 对象），不要 Markdown 围栏、不要额外解释。"
-            "输出必须满足调用方给出的 JSON Schema。示例：{\"...\"}。"
+            '输出必须满足调用方给出的 JSON Schema。示例：{"..."}。'
         )
         messages: list[dict[str, str]] = [
             {"role": "system", "content": sys_text},
@@ -197,15 +248,47 @@ class OpenAICompatibleProvider:
         last_error: str = ""
         self.last_stats = {"attempts": 0, "repair_attempts": 0, "ok": False, "error_kind": None}
         for _attempt in range(max_repair_attempts + 1):
-            self.last_stats["attempts"] = _attempt + 1
+            attempt_no = _attempt + 1
+            self.last_stats["attempts"] = attempt_no
             self.last_stats["repair_attempts"] = _attempt
-            text = self._chat(
-                messages=messages, response_format=self._response_format(schema), timeout_s=timeout_s
-            )
+            self._last_usage = None
+            started = time.perf_counter()
+            try:
+                text = self._chat(
+                    messages=messages,
+                    response_format=self._response_format(schema),
+                    timeout_s=timeout_s,
+                )
+            except ProviderError as exc:
+                self._emit_attempt(
+                    on_attempt,
+                    attempt=attempt_no,
+                    messages=messages,
+                    response_text=None,
+                    ok=False,
+                    error_kind=exc.kind.value,
+                    error_detail=str(exc),
+                    latency_ms=_elapsed_ms(started),
+                    usage=None,
+                )
+                raise
+            latency_ms = _elapsed_ms(started)
+            usage = self._last_usage
             try:
                 data = extract_json_block(text)
             except ProviderError as exc:
                 last_error = f"非 JSON：{exc}"
+                self._emit_attempt(
+                    on_attempt,
+                    attempt=attempt_no,
+                    messages=messages,
+                    response_text=text,
+                    ok=False,
+                    error_kind=ErrorKind.INVALID_OUTPUT.value,
+                    error_detail=last_error,
+                    latency_ms=latency_ms,
+                    usage=usage,
+                )
                 messages.append({"role": "assistant", "content": text[:2000]})
                 messages.append(
                     {"role": "user", "content": "请仅返回严格 JSON（无围栏、无解释），并满足给定 schema。"}
@@ -213,10 +296,19 @@ class OpenAICompatibleProvider:
                 continue
             try:
                 jsonschema.validate(data, schema)
-                self.last_stats["ok"] = True
-                return data
             except jsonschema.ValidationError as exc:
                 last_error = f"schema 校验失败：{exc.message}（路径：{list(exc.absolute_path)}）"
+                self._emit_attempt(
+                    on_attempt,
+                    attempt=attempt_no,
+                    messages=messages,
+                    response_text=text,
+                    ok=False,
+                    error_kind=ErrorKind.INVALID_OUTPUT.value,
+                    error_detail=last_error,
+                    latency_ms=latency_ms,
+                    usage=usage,
+                )
                 logger.debug(f"LLM 输出校验失败，发起修复：{last_error}")
                 messages.append({"role": "assistant", "content": text[:2000]})
                 messages.append(
@@ -225,6 +317,20 @@ class OpenAICompatibleProvider:
                         "content": f"你上一次的 JSON 未通过校验：{last_error}。请返回修正后的严格 JSON。",
                     }
                 )
+                continue
+            self._emit_attempt(
+                on_attempt,
+                attempt=attempt_no,
+                messages=messages,
+                response_text=text,
+                ok=True,
+                error_kind=None,
+                error_detail=None,
+                latency_ms=latency_ms,
+                usage=usage,
+            )
+            self.last_stats["ok"] = True
+            return data
         self.last_stats["error_kind"] = ErrorKind.INVALID_OUTPUT.value
         raise ProviderError(
             ErrorKind.INVALID_OUTPUT,
@@ -241,6 +347,7 @@ class OpenAICompatibleProvider:
         target_lang: str,
         glossary: dict[str, str] | None = None,
         timeout_s: float = 120,
+        on_attempt: Callable[[dict], None] | None = None,
     ) -> list[str]:
         if not items:
             return []
@@ -255,7 +362,7 @@ class OpenAICompatibleProvider:
             f"不得合并、增删或解释。{glossary_txt}\n\n输入：\n{numbered}"
         )
         data = self.generate_structured(
-            prompt=prompt, schema=TRANSLATION_LIST_SCHEMA, timeout_s=timeout_s
+            prompt=prompt, schema=TRANSLATION_LIST_SCHEMA, timeout_s=timeout_s, on_attempt=on_attempt
         )
         out = list(data.get("items", []))
         if len(out) != len(items):

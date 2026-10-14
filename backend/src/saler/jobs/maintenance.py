@@ -1,4 +1,4 @@
-"""维护任务（T136）：操作日志滚动清理 + 备份提醒。
+"""维护任务（T136）：操作日志滚动清理 + LLM 调用明细清理 + 备份提醒。
 
 在应用启动时调用（桌面壳 `_build_app`）；无后台调度器，避免常驻负担。
 """
@@ -11,6 +11,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from saler.db.models import BackupRecord
+from saler.providers.llm import call_log
 from saler.services.operation_log import log_op, prune_logs
 
 BACKUP_REMIND_DAYS = 7
@@ -33,6 +34,9 @@ def run_maintenance(
     removed = prune_logs(db, keep_days=keep_days, keep_max=keep_max)
     if removed:
         logger.info(f"维护：清理操作日志 {removed} 条")
+    calls_removed = call_log.prune_calls(db, keep_days=keep_days)
+    if calls_removed:
+        logger.info(f"维护：清理 LLM 调用明细 {calls_removed} 条")
     due = backup_due(db, days=remind_days)
     if due:
         log_op(
@@ -41,4 +45,4 @@ def run_maintenance(
             f"备份提醒：超过 {remind_days} 天未备份（或从未备份），建议在「设置 → 备份与数据」生成归档",
             level="warn",
         )
-    return {"logs_removed": removed, "backup_due": due}
+    return {"logs_removed": removed, "llm_calls_removed": calls_removed, "backup_due": due}

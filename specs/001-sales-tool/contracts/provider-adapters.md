@@ -34,14 +34,19 @@ class LLMProvider(Protocol):
     def generate_structured(self, *, prompt: str, schema: dict,
                             system: str | None = None,
                             max_repair_attempts: int = 2,
-                            timeout_s: float = 120) -> dict: ...
+                            timeout_s: float = 120,
+                            on_attempt: Callable[[dict], None] | None = None) -> dict: ...
         # 返回通过 schema 校验的 JSON 对象（dict）。
         # 内部流程：请求 → 解析 JSON → jsonschema 校验 → 失败则把校验错误回传模型修复 → 仍失败抛 invalid_output。
+        # on_attempt 逐次尝试回调（llm_call 明细）：{provider, model, attempt, messages, response_text,
+        # ok, error_kind, error_detail, latency_ms, usage}；回调自身异常不得影响模型调用。
 
     def translate(self, *, items: list[str], source_lang: str, target_lang: str,
                   glossary: dict[str, str] | None = None,
-                  timeout_s: float = 120) -> list[str]: ...
+                  timeout_s: float = 120,
+                  on_attempt: Callable[[dict], None] | None = None) -> list[str]: ...
         # 等长返回；glossary 传入词表术语（产品名/行业术语）以保持多语言一致性（FR-038）。
+        # on_attempt 透传给 generate_structured。
 
     def complete(self, *, prompt: str, system: str | None = None,
                  timeout_s: float = 120) -> str: ...

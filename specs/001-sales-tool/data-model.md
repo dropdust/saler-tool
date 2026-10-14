@@ -24,7 +24,7 @@
 │ validation_ │   │ suppression      │                        │ send_record    │
 │  record     │   │ exclusion_rule   │                        └────────────────┘
 └─────────────┘   └──────────────────┘
-系统：llm_provider / search_provider / app_setting / operation_log / backup_record / job
+系统：llm_provider / search_provider / app_setting / operation_log / llm_call / backup_record / job
 ```
 
 ---
@@ -438,6 +438,28 @@
 > 说明：所有长任务（AI 扩充/翻译、回灌、校验、挖掘、发送）都在本表登记，
 > 支撑 `contracts/local-api.md` 的 Job 模式（详情 / SSE / 暂停 / 恢复 / 取消）。
 > `crawl_job` 保留为挖掘领域明细（scope/config/stats），与本表通过 ref 关联。
+
+### E7. `llm_call` LLM 调用明细（逐次尝试的输入/输出/修复链/耗时/用量）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | INTEGER PK | |
+| ts | TEXT | |
+| job_id | INTEGER NULL | 归属任务（无 FK；观测表随滚动清理独立于任务台账） |
+| call_index | INTEGER | 同一任务内第几次模型调用（多语言循环逐语言一次；attempt=1 时自增） |
+| phase | TEXT NULL | 任务层标注的调用上下文（如 `lang:en`） |
+| operation | TEXT | `seed_expand` / `seed_translate` / `term_translate` / `content_draft` / `content_translate` |
+| provider / model | TEXT | 调用时的服务商与模型 |
+| attempt | INTEGER | 该次调用内的第几次尝试（>1 为 schema 修复重试） |
+| ok | BOOLEAN | 该次尝试是否通过校验/成功 |
+| error_kind / error_detail | TEXT NULL | 失败类别（ErrorKind.value）与细节 |
+| request_messages | JSON | 实际发送的消息（system + user + 修复链累积对话） |
+| response_text | TEXT NULL | 模型原始输出 |
+| latency_ms | INTEGER NULL | 该次尝试耗时 |
+| usage | JSON NULL | token 用量（服务商返回时记录） |
+
+**索引**：`ts`、`job_id`、`operation`；容量策略：滚动保留（默认 30 天 / 1 万条，随启动维护清理）。
+**用途**：分析 prompt 质量、修复率与多步编排需求（agent / 模板 / DAG 决策的数据基础）；查询见 `GET /ai/calls`。
 
 ---
 
