@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from saler.security.crypto import SecretBox
 from saler.security.redact import MASK, redact, register_secret_value, scrub_text
 from saler.security.token import AppToken
@@ -30,7 +32,11 @@ def test_resolve_falls_back_to_key_file(tmp_path, monkeypatch):
     box1 = crypto.resolve_secret_box(tmp_path)
     key_file = tmp_path / "secrets" / "master.key"
     assert key_file.exists()
-    assert (key_file.stat().st_mode & 0o777) == 0o600
+    if os.name == "posix":
+        assert (key_file.stat().st_mode & 0o777) == 0o600
+    else:
+        # Windows 无 POSIX 权限位（chmod 仅映射只读位，实测 st_mode=0o100666）：只校验存在且非空
+        assert key_file.stat().st_size > 0
 
     box2 = crypto.resolve_secret_box(tmp_path)
     assert box2.decrypt(box1.encrypt("abc")) == "abc"
