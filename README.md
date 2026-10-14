@@ -86,7 +86,8 @@ bash packaging/build-local.sh --install  # 构建 + 冒烟 + 安装到应用菜�
 ```
 
 - 冻结产物：`backend/dist/SalerTool/`（后端 + 本地 API + 内嵌前端 SPA + 桌面壳，用户点开即用）。
-- 三平台安装器（Inno Setup / DMG / AppImage）见 [packaging/installers/README.md](packaging/installers/README.md)；Windows/macOS 由 [.github/workflows/build.yml](.github/workflows/build.yml) 在对应 runner 构建。
+- 三平台安装器（Inno Setup / zip / AppImage）见 [packaging/installers/README.md](packaging/installers/README.md)；Windows/macOS 由 [.github/workflows/build.yml](.github/workflows/build.yml) 在对应 runner 构建。
+- **发布**：推 `v*` 标签 → build.yml 三平台构建并自动创建 GitHub Release（安装器 + `SHA256SUMS`，说明模板 [packaging/release-notes.md](packaging/release-notes.md)）。
 - 无窗服务模式（诊断 / 无 GUI 环境）：`SalerTool --server --port 8877`，访问地址写入数据目录 `server_url.txt`。
 
 ## 仓库结构

@@ -55,5 +55,6 @@ if ! command -v appimagetool >/dev/null; then
   echo "缺少 appimagetool：下载 https://github.com/AppImage/AppImageKit/releases （或 apt install appimagetool）"
   exit 1
 fi
+mkdir -p "$ROOT/backend/dist/installer"
 ARCH=x86_64 appimagetool "$APPDIR" "$ROOT/backend/dist/installer/SalerTool-${VERSION}-x86_64.AppImage"
 echo "完成：backend/dist/installer/SalerTool-${VERSION}-x86_64.AppImage"

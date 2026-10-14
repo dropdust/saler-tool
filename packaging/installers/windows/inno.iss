@@ -6,7 +6,10 @@
 ; - 卸载默认保留用户数据（数据目录在 %LOCALAPPDATA%，不清除）；提供可选"删除数据"提示
 
 #define MyAppName "销售获客工具"
-#define MyAppVersion "0.1.0"
+; 版本默认 0.1.0；CI 以 iscc /DMyAppVersion=<tag 去 v> 覆盖（见 build.yml）
+#ifndef MyAppVersion
+  #define MyAppVersion "0.1.0"
+#endif
 #define MyAppPublisher "Saler"
 #define MyAppExeName "SalerTool.exe"
 #define DistDir "..\..\backend\dist\SalerTool"

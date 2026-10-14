@@ -1,12 +1,17 @@
-name: Build
+name: Build & Release
 
-# 三平台构建矩阵（T139）：前端构建 → PyInstaller 冻结 → 产物上传
-# 触发：发布标签（v*）或手动。签署/公证为发布阶段步骤（T141），在 secrets 就绪前跳过。
+# 三平台构建矩阵（T139→发布链路）：前端构建 → PyInstaller 冻结 → 安装器打包 → 上传产物；
+# 推 v* 标签时额外创建 GitHub Release（附安装器与 SHA256SUMS），发布说明模板 packaging/release-notes.md。
+# 触发：发布标签（v*）或手动。签署/公证为发布阶段步骤（T141），在 secrets 就绪前跳过
+# （macOS 资产为未签名 zip，见 packaging/installers/macos/dmg-notes.md）。
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -14,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             artifact: SalerTool-linux-x64
           - os: windows-latest
             artifact: SalerTool-windows-x64
@@ -42,19 +47,28 @@ jobs:
           pnpm install --no-frozen-lockfile
           pnpm build
 
-      - name: 后端依赖与冻结
+      - name: Linux 运行库（冻结前置：gi 必须可 import，随包收集 gi.so）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 python3-venv
+
+      - name: 后端冻结（Linux：系统站点包，gi/WebKitGTK 与构建机一致）
+        if: runner.os == 'Linux'
+        working-directory: backend
+        run: |
+          uv venv .venv-frozen --python /usr/bin/python3 --system-site-packages
+          UV_PROJECT_ENVIRONMENT=.venv-frozen uv sync --extra dev
+          UV_PROJECT_ENVIRONMENT=.venv-frozen uv run --no-sync pyinstaller ../packaging/saler.spec --noconfirm
+
+      - name: 后端冻结（Windows / macOS）
+        if: runner.os != 'Linux'
         working-directory: backend
         run: |
           uv sync --extra dev
           uv run pyinstaller ../packaging/saler.spec --noconfirm
 
-      - name: Linux 运行库自检（WebKitGTK 存在性）
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
-
-      - name: 冻结包冒烟（导入/健康检查骨架；完整 S1/S6/S10 见 quickstart）
+      - name: 冻结产物自检
         shell: bash
         run: |
           DIST="backend/dist/SalerTool"
@@ -62,9 +76,79 @@ jobs:
           test -f "$EXE" || { echo "冻结产物缺失"; exit 1; }
           echo "冻结产物：$(du -sh "$DIST" || true)"
 
-      - name: 上传产物
+      - name: 冒烟（Linux：--server 建库/迁移/健康检查/SPA）
+        if: runner.os == 'Linux'
+        run: bash packaging/smoke.sh backend/dist/SalerTool/SalerTool
+
+      - name: 打包安装器（Windows：Inno Setup）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $ver = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '0.0.0-dev' }
+          New-Item -ItemType Directory -Force backend\dist\installer | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" packaging/installers/windows/inno.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 打包安装器（macOS：zip，未签名）
+        if: runner.os == 'macOS'
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) ver="0.0.0-dev" ;; esac
+          mkdir -p backend/dist/installer
+          ditto -c -k --keepParent backend/dist/SalerTool "backend/dist/installer/SalerTool-${ver}-macos-arm64.zip"
+
+      - name: 打包安装器（Linux：AppImage）
+        if: runner.os == 'Linux'
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) ver="0.0.0-dev" ;; esac
+          curl -fsSL -o /tmp/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+          PATH="/tmp:$PATH" APPIMAGE_EXTRACT_AND_RUN=1 VERSION="$ver" \
+            bash packaging/installers/linux/appimage.yml
+
+      - name: 上传安装器
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: backend/dist/SalerTool
+          name: ${{ matrix.artifact }}-installer
+          path: backend/dist/installer/*
+          if-no-files-found: error
           retention-days: 14
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-installer"
+          path: release-assets
+          merge-multiple: true
+
+      - name: 生成校验和
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 创建 GitHub Release（安装器 + SHA256SUMS）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          sed "s/{VERSION}/${ver}/g" packaging/release-notes.md > /tmp/release-notes.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber  # 重跑：覆盖同名资产
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "销售获客工具 ${GITHUB_REF_NAME}" \
+              --notes-file /tmp/release-notes.md \
+              release-assets/*
+          fi

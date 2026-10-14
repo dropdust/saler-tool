@@ -8,8 +8,17 @@
 | 平台 | 安装器 | 说明 |
 |---|---|---|
 | Windows | Inno Setup（`windows/inno.iss`） | 签名采用 Azure Trusted Signing（`windows/sign.md`） |
-| macOS | .app → 签名 + 公证 → DMG | 见 `macos/dmg-notes.md`；脚本 `macos/notarize.sh` |
-| Linux | 本机安装脚本（`linux/install-local.sh`）或 AppImage（`linux/appimage.yml`） | 最低验证基线 Ubuntu 22.04+；需 `python3-gi` + `gir1.2-webkit2-4.1` |
+| macOS | .app → 签名 + 公证 → DMG | 见 `macos/dmg-notes.md`；脚本 `macos/notarize.sh`；签名就绪前发布未签名 zip |
+| Linux | 本机安装脚本（`linux/install-local.sh`）或 AppImage（`linux/appimage.yml`） | CI 产物构建于 Ubuntu 24.04（运行基线 24.04+）；需 `python3-gi` + `gir1.2-webkit2-4.1` |
+
+## 发布流程（GitHub Release）
+
+推 `v*` 标签即触发 `.github/workflows/build.yml`：三平台构建 → 打包安装器
+（Windows Inno Setup / macOS zip / Linux AppImage）→ 自动创建 GitHub Release，
+附各安装器与 `SHA256SUMS`。发布说明模板：`packaging/release-notes.md`（`{VERSION}` 占位，按标签替换）。
+
+AppImage 由 CI 在 ubuntu-24.04 构建（glibc 2.39），运行基线 Ubuntu 24.04+；
+如需兼容更老的发行版，请在目标基线的容器/本机执行 `linux/appimage.yml` 后手动附加到 Release。
 
 ## Linux 构建（已验证流程）
 
