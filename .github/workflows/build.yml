@@ -97,13 +97,29 @@ jobs:
 
       - name: 打包安装器（Windows：Inno Setup）
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: bash
         run: |
-          choco install innosetup --no-progress -y
-          $ver = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '0.0.0-dev' }
-          New-Item -ItemType Directory -Force backend\dist\installer | Out-Null
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" packaging/installers/windows/inno.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # 失败时：stdout 打日志尾部 + Step Summary 留档 + ::error:: 注解（公开仓库匿名可读）
+          diag() {
+            echo "---- $1 日志尾部 ----"
+            tail -40 "$2"
+            { echo "### $1 失败日志（尾部）"; echo '```'; tail -25 "$2"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+            tail -15 "$2" | while IFS= read -r line; do echo "::error::$1: $line"; done
+            exit 1
+          }
+          ver="${GITHUB_REF_NAME#v}"
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) ver="0.0.0-dev" ;; esac
+          echo "版本：$ver"
+          mkdir -p backend/dist/installer
+          command -v choco >/dev/null || { echo "::error::choco 不在 PATH"; exit 1; }
+          choco install innosetup --no-progress -y > /tmp/choco.log 2>&1 || diag choco /tmp/choco.log
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -x "$ISCC" ]; then
+            ls "/c/Program Files (x86)/" | while IFS= read -r line; do echo "::error::pf86: $line"; done
+            exit 1
+          fi
+          "$ISCC" "/DMyAppVersion=$ver" packaging/installers/windows/inno.iss > /tmp/iscc.log 2>&1 || diag iscc /tmp/iscc.log
+          ls -la backend/dist/installer
 
       - name: 打包安装器（macOS：zip，未签名）
         if: runner.os == 'macOS'
