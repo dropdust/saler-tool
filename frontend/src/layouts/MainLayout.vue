@@ -46,6 +46,7 @@
       <el-header class="header">
         <span class="page-title">{{ pageTitle }}</span>
         <span class="spacer" />
+        <TaskCenter />
         <el-tag v-if="appStore.health" type="success" effect="plain">
           本地服务运行中 · v{{ appStore.health.version }}
         </el-tag>
@@ -79,10 +80,13 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { useAppStore } from '../stores/app'
+import { useJobCenterStore } from '../stores/jobCenter'
 import { useThemeStore } from '../stores/theme'
+import TaskCenter from '../components/common/TaskCenter.vue'
 
 const route = useRoute()
 const appStore = useAppStore()
+const jobCenter = useJobCenterStore()
 const themeStore = useThemeStore()
 const activePath = computed(() => route.path)
 const pageTitle = computed(() => (route.meta.title as string) ?? '')
@@ -96,6 +100,8 @@ const isDark = computed({
 onMounted(() => {
   appStore.loadHealth()
   appStore.loadSettings().catch(() => undefined)
+  // 应用启动即接管任务状态：拉取活跃/最近终态并对活跃任务重连 SSE（刷新恢复，FR-006）
+  jobCenter.init().catch(() => undefined)
 })
 </script>
 
