@@ -129,8 +129,22 @@ export interface DomainRow {
   is_excluded: boolean
   exclusion_reason: string | null
   company_id: number | null
+  seed_hits_count: number | null
   last_crawled_at: string | null
   created_at: string | null
+}
+
+export interface DomainSeedHit {
+  seed_id: number
+  query: string
+  lang: string | null
+  source: string | null
+  job_id: number | null
+  first_seen_at: string | null
+}
+
+export interface DomainDetail extends DomainRow {
+  seed_hits: DomainSeedHit[]
 }
 
 export interface CompanyRow {

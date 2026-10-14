@@ -57,6 +57,21 @@
           <template #default="{ row }">{{ row.language || '—' }}</template>
         </el-table-column>
         <el-table-column prop="source" label="来源" width="100" />
+        <el-table-column label="命中" width="90">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.seed_hits_count"
+              class="provenance-link"
+              link
+              type="primary"
+              size="small"
+              @click="openProvenance(row as DomainRow)"
+            >
+              {{ row.seed_hits_count }} 条
+            </el-button>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="页/次" width="90">
           <template #default="{ row }">{{ row.fetched_pages }} / {{ row.attempts }}</template>
         </el-table-column>
@@ -85,16 +100,26 @@
         @current-change="load"
       />
     </el-card>
+
+    <el-dialog v-model="provenanceVisible" :title="`检索溯源：${provenanceDomain}`" width="680px">
+      <p class="provenance-summary">{{ provenanceSummaryText }}</p>
+      <el-table :data="provenanceRowItems" size="small" max-height="380">
+        <el-table-column prop="query" label="query 词（种子）" min-width="300" show-overflow-tooltip />
+        <el-table-column prop="jobLabel" label="任务" width="100" />
+        <el-table-column prop="timeLabel" label="首次命中" width="170" />
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import type { DomainRow, Paginated } from '../../api/types'
+import type { DomainDetail, DomainRow, DomainSeedHit, Paginated } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
+import { provenanceRows, provenanceSummary } from './domainProvenance'
 
 const items = ref<DomainRow[]>([])
 const total = ref(0)
@@ -134,6 +159,19 @@ async function toggleExclude(row: DomainRow) {
   await load()
 }
 
+const provenanceVisible = ref(false)
+const provenanceDomain = ref('')
+const provenanceHits = ref<DomainSeedHit[]>([])
+const provenanceSummaryText = computed(() => provenanceSummary(provenanceHits.value))
+const provenanceRowItems = computed(() => provenanceRows(provenanceHits.value))
+
+async function openProvenance(row: DomainRow) {
+  const detail = await api.get<DomainDetail>(`/domains/${row.id}`)
+  provenanceDomain.value = row.domain
+  provenanceHits.value = detail.seed_hits ?? []
+  provenanceVisible.value = true
+}
+
 onMounted(load)
 </script>
 
@@ -144,5 +182,9 @@ onMounted(load)
 .pager {
   margin-top: 12px;
   justify-content: flex-end;
+}
+.provenance-summary {
+  margin: 0 0 10px;
+  color: var(--el-text-color-secondary);
 }
 </style>

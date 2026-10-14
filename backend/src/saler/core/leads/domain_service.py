@@ -1,13 +1,17 @@
-"""候选域名共享服务（US1 回灌与本工具挖掘共用；domain 唯一）。"""
+"""候选域名共享服务（US1 回灌与本工具挖掘共用；domain 唯一）。
+
+含检索溯源出口：命中计数（列表批量）与命中明细（详情，query 词/任务/首次命中时间）。
+"""
 
 from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from sqlalchemy import func
 from sqlalchemy.orm import Query, Session
 
 from saler.core.errors import NotFound, ValidationFailed
-from saler.db.models import Domain
+from saler.db.models import Domain, DomainSeedHit, Seed
 
 
 def normalize_domain(raw: str) -> str | None:
@@ -87,6 +91,30 @@ def list_domains(
     if q:
         query = query.filter(Domain.domain.contains(q))
     return query.order_by(Domain.id.desc())
+
+
+def seed_hit_counts(db: Session, domain_ids: list[int]) -> dict[int, int]:
+    """批量取域名→命中种子数（列表页用；无命中的域名不在返回中）。"""
+    if not domain_ids:
+        return {}
+    rows = (
+        db.query(DomainSeedHit.domain_id, func.count(DomainSeedHit.id))
+        .filter(DomainSeedHit.domain_id.in_(domain_ids))
+        .group_by(DomainSeedHit.domain_id)
+        .all()
+    )
+    return {domain_id: count for domain_id, count in rows}
+
+
+def list_seed_hits(db: Session, domain_id: int) -> list[tuple[Seed, DomainSeedHit]]:
+    """域名命中明细（query 词 + 任务 + 首次命中时间），新→旧；无命中返回空列表。"""
+    return (
+        db.query(Seed, DomainSeedHit)
+        .join(DomainSeedHit, DomainSeedHit.seed_id == Seed.id)
+        .filter(DomainSeedHit.domain_id == domain_id)
+        .order_by(DomainSeedHit.first_seen_at.desc(), DomainSeedHit.id.desc())
+        .all()
+    )
 
 
 def update_domain(db: Session, domain_id: int, **fields) -> Domain:

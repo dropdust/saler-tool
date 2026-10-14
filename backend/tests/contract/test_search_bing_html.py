@@ -25,6 +25,21 @@ EMPTY_RSS = (
 NO_RESULT_HTML = '<html><body><ol id="b_results"><li class="b_no">没有与此相关的结果</li></ol></body></html>'
 BLANK_HTML = "<html><body><p>blank</p></body></html>"
 
+DECOY_QUERY = '"pole line hardware" distributor contact -alibaba'
+RELEVANT_RSS = (
+    '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>q</title>'
+    "<item><title>Pole Line Hardware Supplier</title>"
+    "<link>https://pole-line-hardware.example/</link></item>"
+    "</channel></rss>"
+)
+RELEVANT_HTML = (
+    '<html><body><ol id="b_results">'
+    '<li class="b_algo"><h2><a href="https://pole-line-hardware.example/">'
+    "Pole Line Hardware Supplier</a></h2>"
+    '<div class="b_caption"><p>Distributor of pole line hardware and fittings.</p></div></li>'
+    "</ol></body></html>"
+)
+
 
 def fx(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
@@ -129,6 +144,69 @@ class TestBingGeoRedirect:
             _engine().search(query="q")
         assert ei.value.kind == ErrorKind.BLOCKED
         assert "cn.bing.com" in str(ei.value)
+
+
+class TestBingDecoyResults:
+    """幌子结果（风控替换页）：页面回显查询词正确、条目却与查询零相关（实证 2026-10-14 事故）。"""
+
+    @respx.mock
+    def test_relevant_rss_used_directly(self):
+        route = respx.get(BING_URL).mock(return_value=httpx.Response(200, text=RELEVANT_RSS))
+        items = _engine().search(query=DECOY_QUERY, count=5)
+        assert [i.title for i in items] == ["Pole Line Hardware Supplier"]
+        assert len(route.calls) == 1  # 相关 RSS → 不触发 HTML 复核
+
+    @respx.mock
+    def test_decoy_rss_reviewed_via_html(self):
+        def handler(request):
+            if request.url.params.get("format") == "rss":
+                return httpx.Response(200, text=fx("decoy_rss.xml"))
+            return httpx.Response(200, text=RELEVANT_HTML)
+
+        route = respx.get(BING_URL).mock(side_effect=handler)
+        items = _engine().search(query=DECOY_QUERY)
+        assert [i.title for i in items] == ["Pole Line Hardware Supplier"]
+        assert len(route.calls) == 2  # RSS 幌子 → 转 HTML 复核后才采用
+
+    @respx.mock
+    def test_decoy_html_is_blocked(self):
+        def handler(request):
+            if request.url.params.get("format") == "rss":
+                return httpx.Response(200, text=EMPTY_RSS)
+            return httpx.Response(200, text=fx("decoy.html"))
+
+        respx.get(BING_URL).mock(side_effect=handler)
+        with pytest.raises(ProviderError) as ei:
+            _engine().search(query=DECOY_QUERY)
+        assert ei.value.kind == ErrorKind.BLOCKED
+        assert "幌子" in str(ei.value)
+
+    @respx.mock
+    def test_decoy_both_forms_is_blocked(self):
+        def handler(request):
+            if request.url.params.get("format") == "rss":
+                return httpx.Response(200, text=fx("decoy_rss.xml"))
+            return httpx.Response(200, text=fx("decoy.html"))
+
+        respx.get(BING_URL).mock(side_effect=handler)
+        with pytest.raises(ProviderError) as ei:
+            _engine().search(query=DECOY_QUERY)
+        assert ei.value.kind == ErrorKind.BLOCKED
+
+    @respx.mock
+    def test_query_without_judicable_terms_skips_check(self):
+        # 提取不到实词（如 "q"）→ 不下幌子结论，保持既有行为（保守）
+        def handler(request):
+            if request.url.params.get("format") == "rss":
+                return httpx.Response(200, text=EMPTY_RSS)
+            return httpx.Response(200, text=fx("decoy.html"))
+
+        respx.get(BING_URL).mock(side_effect=handler)
+        items = _engine().search(query="q")
+        assert [i.title for i in items] == [
+            "Methodist Churches in Johnson City, TN",
+            "28 Best Coffee Shops in Seattle, WA (2026)",
+        ]
 
 
 class TestBingManifest:

@@ -165,7 +165,7 @@ def crawl_job_to_dict(row) -> dict[str, Any]:
     }
 
 
-def domain_to_dict(row) -> dict[str, Any]:
+def domain_to_dict(row, *, seed_hits_count: int | None = None) -> dict[str, Any]:
     return {
         "id": row.id,
         "domain": row.domain,
@@ -184,8 +184,21 @@ def domain_to_dict(row) -> dict[str, Any]:
         "is_excluded": row.is_excluded,
         "exclusion_reason": row.exclusion_reason,
         "company_id": row.company_id,
+        "seed_hits_count": seed_hits_count,
         "last_crawled_at": iso(row.last_crawled_at),
         "created_at": iso(row.created_at),
+    }
+
+
+def seed_hit_to_dict(seed, hit) -> dict[str, Any]:
+    """域名命中溯源条目：哪条 query 词、哪次任务、何时首次命中。"""
+    return {
+        "seed_id": seed.id,
+        "query": seed.query,
+        "lang": seed.lang,
+        "source": seed.source,
+        "job_id": hit.job_id,
+        "first_seen_at": iso(hit.first_seen_at),
     }
 
 

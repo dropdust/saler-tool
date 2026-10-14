@@ -1,14 +1,51 @@
-"""检索适配器共用：HTTP 客户端构建、错误分类、预置模板。"""
+"""检索适配器共用：HTTP 客户端构建、错误分类、幌子结果判定、预置模板。"""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
 
 from saler.providers.errors import ErrorKind, ProviderError
+from saler.providers.search.base import SearchItem
 
 DEFAULT_UA = "SalerTool/0.1 (local desktop lead discovery)"
+
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+_BOOLEAN_OPERATORS = {"or", "and", "not"}
+#: 无空格文字（CJK/假名/谚文）逐字重叠率过高，不参与词面判定
+_CJK_FLOOR = 0x2E80
+
+
+def query_terms(query: str) -> set[str]:
+    """提取用于相关性判定的实词：小写、≥3 字符、剔除 -排除词/布尔算符/CJK 片段。"""
+    terms: set[str] = set()
+    for raw in (query or "").split():
+        if raw.startswith("-"):
+            continue  # -排除词：不是期望出现的内容
+        for word in _WORD_RE.findall(raw.lower()):
+            if len(word) >= 3 and word not in _BOOLEAN_OPERATORS and all(
+                ord(ch) < _CJK_FLOOR for ch in word
+            ):
+                terms.add(word)
+    return terms
+
+
+def looks_like_decoy(query: str, items: list[SearchItem]) -> bool:
+    """幌子结果判定（Bing 风控实证：页面回显查询词正确、条目却属于别的查询）。
+
+    规则保守：提取不到实词或无条目时不下结论；仅当全部条目与查询零词面重叠时判为幌子。
+    词面 = 分词后的前缀匹配（"poles"≈"pole"；"online" 不算 "line"——纯子串匹配会漏判）。
+    """
+    terms = query_terms(query)
+    if not terms or not items:
+        return False
+    for item in items:
+        tokens = _WORD_RE.findall(f"{item.title} {item.url} {item.snippet}".lower())
+        if any(token.startswith(term) for term in terms for token in tokens):
+            return False
+    return True
 
 
 def build_client(*, timeout_s: float, proxy: str | None = None) -> httpx.Client:

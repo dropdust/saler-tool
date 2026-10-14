@@ -6,7 +6,9 @@
 - **HTML 形态**：`?q=&count=&mkt=en-US&cc=US&ensearch=1` + `Cookie: ENSEARCH=BENVER=1`；
   `li.b_algo` 解析；`ck/a` 的 `u=a1<base64url>` 离线还原（`&amp;` 先反转义）。
 - **风控**：静默 captcha（HTTP 200 + `class="captcha"` + 0 结果）/"One last step" 插页 → blocked；
-  落地 cn.bing.com → 经 www4.bing.com 重试一次，仍被地理重定向 → blocked（提示检查代理出口）。
+  落地 cn.bing.com → 经 www4.bing.com 重试一次，仍被地理重定向 → blocked（提示检查代理出口）；
+  **幌子结果**（200 + 回显查询词正确、条目却与查询零相关——2026-10-14 事故实证）→
+  RSS 幌子转 HTML 复核；HTML 幌子判 blocked，绝不入库。
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from saler.providers.errors import ErrorKind, ProviderError
 from saler.providers.registry import ProviderManifest, registry
+from saler.providers.search._common import looks_like_decoy
 from saler.providers.search.base import SearchItem
 from saler.providers.search.html_base import HTMLSearchEngine
 
@@ -67,10 +70,10 @@ class BingHTMLEngine(HTMLSearchEngine):
         country: str | None = None,
         timeout_s: float = 30,
     ) -> list[SearchItem]:
-        """两级形态：RSS 优先；空结果（含空 XML）转 HTML 复核后再按纪律定论。"""
+        """两级形态：RSS 优先；空结果（含空 XML）或幌子结果转 HTML 复核后再按纪律定论。"""
         client = self._client_for(timeout_s)
         items = self._search_rss(client, query, lang, timeout_s)
-        if items:
+        if items and not looks_like_decoy(query, items):
             return items[:count]
         return self._search_html(client, query, count, lang, timeout_s, retried=False)
 
@@ -124,7 +127,14 @@ class BingHTMLEngine(HTMLSearchEngine):
                 provider=self.type_key,
             )
         self._check_blocked(resp)
-        return self._resolve_results(resp.text)[:count]
+        items = self._resolve_results(resp.text)[:count]
+        if items and looks_like_decoy(query, items):
+            raise ProviderError(
+                ErrorKind.BLOCKED,
+                "幌子结果（条目与查询词零相关，疑似风控替换页）",
+                provider=self.type_key,
+            )
+        return items
 
     @staticmethod
     def _html_form(query: str, count: int, lang: str | None) -> tuple[dict[str, Any], dict[str, str]]:

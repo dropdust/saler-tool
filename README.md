@@ -59,11 +59,20 @@ Ubuntu 桌面壳运行库：`sudo apt install python3-gi gir1.2-webkit2-4.1`。
 
 本地 API 契约（路由、Job/SSE 模式、鉴权）见 [specs/001-sales-tool/contracts/local-api.md](specs/001-sales-tool/contracts/local-api.md)。
 
+### 维护脚本
+
+```bash
+cd backend && uv run python -m saler.services.purge_crawl_results --job-id <id>          # 干跑统计
+cd backend && uv run python -m saler.services.purge_crawl_results --job-id <id> --apply  # 执行
+```
+
+整批回退一次挖掘任务的检索产出（候选域名、命中归因、其下游公司与联系人；复位任务窗口内的种子），用于检索渠道污染（如幌子结果）后的数据清理；默认干跑，`--apply` 才写库。
+
 ## 测试与静态检查
 
 ```bash
-cd backend  && uv run pytest -q && uv run ruff check src tests   # 当前基线：320 passed
-cd frontend && pnpm test && pnpm lint                            # 当前基线：57 passed
+cd backend  && uv run pytest -q && uv run ruff check src tests   # 当前基线：369 passed
+cd frontend && pnpm test && pnpm lint                            # 当前基线：125 passed
 ```
 
 测试分层：领域逻辑单元测试、假 Provider 契约测试（四类假适配器，全离线）、临时数据目录集成测试；前端 vitest。
@@ -95,7 +104,7 @@ backend/    Python 包 saler：
 frontend/   Vue 3 SPA：views（五模块界面 + 设置）/ api（契约客户端）/ stores / components
 packaging/  PyInstaller spec、Linux 一键构建脚本、三平台安装器
 specs/      规格驱动工件（spec / plan / 契约 / quickstart 验收场景）
-docs/       面向使用者的用户手册
+docs/       用户手册与项目商业化方案
 ```
 
 ## 文档索引
@@ -108,6 +117,7 @@ docs/       面向使用者的用户手册
 | 接口契约（本地 API / 适配器 / 数据交换） | [specs/001-sales-tool/contracts/](specs/001-sales-tool/contracts/) |
 | 运行与逐场景验收（S1–S12） | [specs/001-sales-tool/quickstart.md](specs/001-sales-tool/quickstart.md) |
 | 面向使用者的操作手册 | [docs/user-guide.md](docs/user-guide.md) |
+| 商业化路径与版本分层 | [docs/commercialization.md](docs/commercialization.md) |
 | 开发宪法与质量门 | [.specify/memory/constitution.md](.specify/memory/constitution.md) |
 | 当前进度（唯一事实源） | [specs/001-sales-tool/tasks.md](specs/001-sales-tool/tasks.md) 及 `specs/00x-*/tasks.md` 勾选状态 |
 
