@@ -37,7 +37,8 @@ jobs:
           version: 11
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 必须 ≥22.13：pnpm 11 的 engines 要求（node 20 下 pnpm 会拒绝启动、秒退）
+          node-version: 22
       - name: 安装依赖
         working-directory: frontend
         run: pnpm install --no-frozen-lockfile

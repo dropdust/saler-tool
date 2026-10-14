@@ -41,13 +41,26 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 必须 ≥22.13：pnpm 11 的 engines 要求（node 20 下 pnpm 会拒绝启动、秒退）
+          node-version: 22
 
       - name: 前端构建
         working-directory: frontend
+        shell: bash
         run: |
-          pnpm install --no-frozen-lockfile
-          pnpm build
+          # 失败时把日志尾部同步打为 ::error:: 注解（公开仓库匿名可读，便于无登录诊断）
+          run_step() {
+            local name="$1"; shift
+            if ! "$@" > "/tmp/fe-$name.log" 2>&1; then
+              tail -40 "/tmp/fe-$name.log"
+              tail -12 "/tmp/fe-$name.log" | while IFS= read -r line; do echo "::error::$name: $line"; done
+              exit 1
+            fi
+          }
+          node --version
+          run_step install pnpm install --no-frozen-lockfile
+          run_step build pnpm build
+          echo "前端构建完成：$(du -sh dist | cut -f1)"
 
       - name: Linux 运行库（冻结前置：gi 必须可 import，随包收集 gi.so）
         if: runner.os == 'Linux'
