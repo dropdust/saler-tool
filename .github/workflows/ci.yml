@@ -24,7 +24,16 @@ jobs:
         run: uv run ruff check src tests
       - name: 测试
         working-directory: backend
-        run: uv run pytest -q
+        shell: bash
+        run: |
+          # 失败时把 pytest 输出尾部同步为注解/摘要（公开仓库原始日志匿名不可读）
+          if ! uv run pytest -q > /tmp/pytest.log 2>&1; then
+            tail -60 /tmp/pytest.log
+            { echo "### pytest 失败日志（尾部）"; echo '```'; tail -40 /tmp/pytest.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+            tail -25 /tmp/pytest.log | while IFS= read -r line; do echo "::error::pytest: $line"; done
+            exit 1
+          fi
+          tail -3 /tmp/pytest.log
 
   frontend:
     runs-on: ubuntu-latest
