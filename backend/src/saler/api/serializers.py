@@ -8,12 +8,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from saler.jobs.catalog import meta as job_type_meta
+
 
 def iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
 def job_to_dict(job) -> dict[str, Any]:
+    type_meta = job_type_meta(getattr(job, "job_type", None))
     return {
         "id": job.id,
         "job_type": job.job_type,
@@ -27,6 +30,9 @@ def job_to_dict(job) -> dict[str, Any]:
         "created_at": iso(job.created_at),
         "started_at": iso(job.started_at),
         "finished_at": iso(job.finished_at),
+        # 任务能力（目录派生，契约 §4）：前端据此渲染暂停/重跑按钮
+        "can_pause": type_meta.pausable,
+        "rerunnable": type_meta.rerunnable,
     }
 
 
