@@ -87,7 +87,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import type { Paginated, SendRecordRow } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
@@ -105,6 +105,7 @@ const STATUS_LABELS: Record<string, string> = {
 const route = useRoute()
 const router = useRouter()
 const campaignId = Number(route.params.id)
+const jobCenter = useJobCenterStore()
 
 const items = ref<SendRecordRow[]>([])
 const loading = ref(false)
@@ -157,7 +158,7 @@ async function retrySelected() {
   )
   ElMessage.success(`已重置 ${result.reset} 条并重新发送`)
   if (result.job_id) {
-    const job = await watchJob(result.job_id)
+    const job = await jobCenter.waitFor(result.job_id)
     ElMessage.success(`重试完成：成功 ${job.result?.sent ?? 0}`)
   }
   failedSelection.value = []

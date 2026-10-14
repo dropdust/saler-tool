@@ -89,11 +89,12 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import PageHeader from '../../components/common/PageHeader.vue'
 import { LANGS } from '../../constants'
 
 const loading = ref(false)
+const jobCenter = useJobCenterStore()
 const saving = ref(false)
 const form = ref({
   ui_lang: 'zh-CN',
@@ -176,7 +177,7 @@ async function moveDir() {
     const { job_id } = await api.post<{ job_id: number }>('/settings/data-dir/move', {
       path: newDir.value.trim(),
     })
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       dirOk.value = true
       dirStatus.value = `迁移完成（${job.result?.files_copied ?? '?'} 个文件已核对）：重启应用后生效`

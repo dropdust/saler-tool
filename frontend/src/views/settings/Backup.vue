@@ -45,7 +45,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ApiError, api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import PageHeader from '../../components/common/PageHeader.vue'
 
 interface BackupRow {
@@ -58,6 +58,7 @@ interface BackupRow {
 }
 
 const items = ref<BackupRow[]>([])
+const jobCenter = useJobCenterStore()
 const loading = ref(false)
 const backingUp = ref(false)
 const exporting = ref(false)
@@ -82,7 +83,7 @@ async function createBackup() {
   backingUp.value = true
   try {
     const { job_id } = await api.post<{ job_id: number }>('/backups', {})
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       ElMessage.success(`备份完成：${job.result?.path ?? ''}`)
       await load()
@@ -98,7 +99,7 @@ async function exportAll() {
   exporting.value = true
   try {
     const { job_id } = await api.post<{ job_id: number }>('/export/all', {})
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       ElMessage.success(`全量导出完成：${job.result?.path ?? ''}`)
     } else {
@@ -125,7 +126,7 @@ async function restore(row: BackupRow) {
   )
   const { job_id } = await api.post<{ job_id: number }>('/restore', { path: row.path })
   try {
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       ElMessage.success('恢复完成：数据库已整体替换，建议重启应用')
     } else {

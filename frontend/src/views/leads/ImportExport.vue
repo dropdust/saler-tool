@@ -77,10 +77,11 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import PageHeader from '../../components/common/PageHeader.vue'
 
 const importPath = ref('')
+const jobCenter = useJobCenterStore()
 const importContent = ref('')
 const importReport = ref<Record<string, any> | null>(null)
 const importing = ref(false)
@@ -96,7 +97,7 @@ async function doImport() {
       path: importPath.value.trim() || null,
       content: importContent.value || null,
     })
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       importReport.value = job.result
       ElMessage.success('导入完成')

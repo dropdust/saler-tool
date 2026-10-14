@@ -133,11 +133,12 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import type { GraphNode, Paginated } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 
 const router = useRouter()
+const jobCenter = useJobCenterStore()
 
 const discoverForm = ref({
   queriesText: '',
@@ -177,7 +178,7 @@ async function doDiscover() {
       max_orgs: discoverForm.value.max_orgs,
       max_seeds: discoverForm.value.max_seeds,
     })
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       discoverReport.value = (job.result ?? {}) as Record<string, number>
       ElMessage.success('检索扩充完成：结果已进入待审核')
@@ -234,7 +235,7 @@ async function doIngest() {
       path: ingestForm.value.path || null,
       content: ingestForm.value.content || null,
     })
-    const job = await watchJob(job_id)
+    const job = await jobCenter.waitFor(job_id)
     if (job.status === 'completed') {
       ingestReport.value = job.result
       ElMessage.success('回灌完成')
