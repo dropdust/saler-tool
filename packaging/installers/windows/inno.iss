@@ -30,7 +30,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; 安装前关闭正在运行的实例由 [Code] 段处理
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; Inno Setup 官方发行不含中文语言文件（中文属非官方翻译）：随仓库携带
+Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion

@@ -99,12 +99,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          # 失败时：stdout 打日志尾部 + Step Summary 留档 + ::error:: 注解（公开仓库匿名可读）
+          # 失败时：stdout 打日志尾部 + Step Summary 留档 + ::error:: 注解（公开仓库匿名可读）。
+          # 注解口径 tail -6：GitHub 单步骤最多保留 10 条注解，超出截断会丢掉最后的真正报错行
           diag() {
             echo "---- $1 日志尾部 ----"
             tail -40 "$2"
             { echo "### $1 失败日志（尾部）"; echo '```'; tail -25 "$2"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-            tail -15 "$2" | while IFS= read -r line; do echo "::error::$1: $line"; done
+            tail -6 "$2" | while IFS= read -r line; do echo "::error::$1: $line"; done
             exit 1
           }
           ver="${GITHUB_REF_NAME#v}"
