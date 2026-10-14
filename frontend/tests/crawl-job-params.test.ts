@@ -9,6 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia } from 'pinia'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 
@@ -33,7 +34,8 @@ function stubApi() {
 
 async function openStartDialog(): Promise<VueWrapper> {
   const wrapper = mount(CrawlJobs, {
-    global: { plugins: [ElementPlus] },
+    // 005 T234：页面改读全局任务中心 store，挂载需 pinia
+    global: { plugins: [createPinia(), ElementPlus] },
     attachTo: document.body,
   })
   await flushPromises()

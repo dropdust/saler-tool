@@ -10,15 +10,29 @@
       </template>
     </PageHeader>
 
-    <el-card v-if="activeJobId" class="monitor" shadow="never">
+    <!-- 监控卡片：状态与进度一律读全局任务中心 store（同源一致 FR-008；进入页面自动选中活跃任务） -->
+    <el-card v-if="selectedJob" class="monitor" shadow="never" data-test="monitor-card">
       <template #header>
-        <b>任务 #{{ activeJobId }}</b>
-        <StatusTag :status="activeStatus" class="tag" />
+        <b>任务 #{{ selectedJob.id }}</b>
+        <StatusTag :status="selectedJob.status" class="tag" />
         <span class="spacer" />
-        <el-button v-if="activeStatus === 'running'" size="small" @click="control('pause')">暂停</el-button>
-        <el-button v-if="activeStatus === 'paused'" size="small" type="success" @click="control('resume')">恢复</el-button>
         <el-button
-          v-if="['running', 'paused', 'queued'].includes(activeStatus)"
+          v-if="selectedJob.can_pause && selectedJob.status === 'running'"
+          size="small"
+          @click="control('pause')"
+        >
+          暂停
+        </el-button>
+        <el-button
+          v-if="selectedJob.can_pause && selectedJob.status === 'paused'"
+          size="small"
+          type="success"
+          @click="control('resume')"
+        >
+          恢复
+        </el-button>
+        <el-button
+          v-if="['running', 'paused', 'queued'].includes(selectedJob.status)"
           size="small"
           type="danger"
           @click="control('cancel')"
@@ -26,9 +40,14 @@
           取消
         </el-button>
       </template>
-      <el-progress :percentage="progressPercent" :stroke-width="14" :format="() => progressText" />
-      <div class="logs">
-        <div v-for="(line, index) in recentLines" :key="index" class="log-line">{{ line }}</div>
+      <el-progress
+        :percentage="view?.percent ?? 0"
+        :indeterminate="view?.indeterminate ?? true"
+        :stroke-width="14"
+        :format="() => view?.text ?? ''"
+      />
+      <div v-if="logLines.length" class="logs">
+        <div v-for="(line, index) in logLines" :key="index" class="log-line">{{ line.message }}</div>
       </div>
     </el-card>
 
@@ -51,7 +70,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="watch(row.id)">监控</el-button>
+            <el-button size="small" text type="primary" @click="monitor(row.id)">监控</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -59,6 +78,14 @@
 
     <el-dialog v-model="createVisible" title="启动挖掘任务" width="660px">
       <el-form label-width="120px">
+        <el-form-item v-if="sameTypeActive" label="进行中">
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="`已有进行中的挖掘任务（#${sameTypeActive.id}）——任务中心可见进度；同时运行可能重复抓取同一批域名`"
+          />
+        </el-form-item>
         <el-form-item label="种子范围">
           <el-radio-group v-model="scopeMode">
             <el-radio value="pending">全部待执行（已采纳）</el-radio>
@@ -120,11 +147,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch as watchRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { useJobEvents } from '../../composables/useJobEvents'
-import type { CrawlJobRow, Paginated, Seed } from '../../api/types'
+import { useJobCenterStore } from '../../stores/jobCenter'
+import type { CrawlJobRow, JobPayload, Paginated, Seed } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
 
@@ -143,27 +170,30 @@ const config = ref({
   proxy: '',
 })
 
-const activeJobId = ref<number | null>(null)
-const activeStatus = ref('queued')
-const activeProgress = ref<Record<string, number>>({})
-const recentLines = ref<string[]>([])
-const { subscribe } = useJobEvents()
+const store = useJobCenterStore()
+// 选中的挖掘明细（crawl_job id）；对应的通用任务从 store 反查（活跃优先 → 最近终态）
+const selectedCrawlJobId = ref<number | null>(null)
 
-const progressPercent = computed(() => {
-  if (activeStatus.value === 'completed') return 100
-  const p = activeProgress.value
-  if (p.total_seeds) return Math.min(99, Math.round(((p.seeds_processed ?? 0) / p.total_seeds) * 50))
-  if (p.total_domains) return Math.min(99, 50 + Math.round(((p.fetched_domains ?? 0) / p.total_domains) * 50))
-  return activeStatus.value === 'running' ? 5 : 0
+function matchCrawl(job: JobPayload, crawlJobId: number): boolean {
+  return job.ref_type === 'crawl_job' && job.ref_id === crawlJobId
+}
+
+const selectedJob = computed<JobPayload | null>(() => {
+  const id = selectedCrawlJobId.value
+  if (id === null) return null
+  return (
+    store.activeList.find((job) => matchCrawl(job, id)) ??
+    store.recentJobs.find((job) => matchCrawl(job, id)) ??
+    null
+  )
 })
-const progressText = computed(() => {
-  if (activeStatus.value === 'completed') return '已完成'
-  if (activeStatus.value === 'failed') return '失败'
-  const p = activeProgress.value
-  if (p.total_seeds) return `检索：${p.seeds_processed ?? 0}/${p.total_seeds} 条种子`
-  if (p.total_domains) return `抓取：${p.fetched_domains ?? 0}/${p.total_domains} 个域名`
-  return '准备中…'
+const view = computed(() => (selectedJob.value ? store.progressView(selectedJob.value) : null))
+const logLines = computed(() => {
+  const id = selectedJob.value?.id
+  if (id === undefined) return []
+  return [...(store.logs[id] ?? [])].reverse()
 })
+const sameTypeActive = computed(() => store.activeJobOfType('crawl'))
 
 async function loadJobs() {
   loading.value = true
@@ -181,38 +211,27 @@ function statsText(row: CrawlJobRow): string {
   return `种子 ${s.seeds_processed ?? 0} · 域名 ${s.domains_found ?? 0} · 完成 ${s.domains_done ?? 0} · 联系方式 ${s.contacts_created ?? 0}`
 }
 
-function pushLine(text: string) {
-  recentLines.value.unshift(text)
-  if (recentLines.value.length > 60) recentLines.value.pop()
+function autoSelect() {
+  if (selectedCrawlJobId.value !== null) return
+  const job = sameTypeActive.value
+  if (job && job.ref_type === 'crawl_job' && job.ref_id != null) {
+    selectedCrawlJobId.value = job.ref_id
+  }
 }
 
-function watch(jobId: number) {
-  activeJobId.value = jobId
-  activeStatus.value = 'queued'
-  activeProgress.value = {}
-  recentLines.value = []
-  subscribe(jobId, {
-    onProgress: (data) => {
-      const snapshot = (data as { snapshot?: { status?: string } }).snapshot
-      if (snapshot?.status) activeStatus.value = snapshot.status
-      const numeric = Object.fromEntries(
-        Object.entries(data).filter(([, value]) => typeof value === 'number'),
-      ) as Record<string, number>
-      activeProgress.value = { ...activeProgress.value, ...numeric }
-    },
-    onLog: (data) => pushLine(data.message),
-    onDone: (data) => {
-      activeStatus.value = 'completed'
-      const result = (data as { result?: Record<string, number> }).result
-      pushLine(`完成：新增联系方式 ${result?.contacts_created ?? 0}，域名 ${result?.domains_done ?? 0}`)
-      ElMessage.success('挖掘任务完成')
-      loadJobs()
-    },
-    onError: (data) => {
-      activeStatus.value = 'failed'
-      pushLine(`错误：${(data as { message?: string }).message ?? '任务失败'}`)
-    },
-  })
+// store.init 在 MainLayout（父层）挂载完成后才填充——watch 覆盖两种到达顺序（FR-006 自动恢复展示）
+watchRef(() => store.activeList, autoSelect, { immediate: true })
+
+function monitor(crawlJobId: number) {
+  const id = crawlJobId
+  const job =
+    store.activeList.find((row) => matchCrawl(row, id)) ??
+    store.recentJobs.find((row) => matchCrawl(row, id))
+  if (!job) {
+    ElMessage.info('该任务不在实时保留窗口内（任务中心仅保留最近 24 小时）；统计见下方列表')
+    return
+  }
+  selectedCrawlJobId.value = id
 }
 
 async function openCreate() {
@@ -229,13 +248,18 @@ async function openCreate() {
 async function startCrawl() {
   starting.value = true
   try {
-    const { job_id } = await api.post<{ job_id: number }>('/crawl/jobs', {
-      seed_ids: scopeMode.value === 'select' ? seedIds.value : null,
-      config: config.value,
-    })
+    const { job_id, crawl_job_id } = await api.post<{ job_id: number; crawl_job_id: number }>(
+      '/crawl/jobs',
+      {
+        seed_ids: scopeMode.value === 'select' ? seedIds.value : null,
+        config: config.value,
+      },
+    )
     createVisible.value = false
-    watch(job_id)
-    ElMessage.success('挖掘任务已启动')
+    selectedCrawlJobId.value = crawl_job_id
+    // 登记进任务中心（立即订阅，不等下一次列表刷新）
+    await store.register(job_id)
+    ElMessage.success('挖掘任务已启动（进度可在任务中心随时查看）')
     loadJobs()
   } finally {
     starting.value = false
@@ -243,9 +267,9 @@ async function startCrawl() {
 }
 
 async function control(action: 'pause' | 'resume' | 'cancel') {
-  if (!activeJobId.value) return
-  await api.post(`/jobs/${activeJobId.value}/${action}`)
-  activeStatus.value = action === 'pause' ? 'paused' : action === 'resume' ? 'running' : 'cancelled'
+  const job = selectedJob.value
+  if (!job) return
+  await store.control(job.id, action)
 }
 
 onMounted(loadJobs)
