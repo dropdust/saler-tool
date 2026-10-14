@@ -118,7 +118,6 @@ docs/       用户手册与项目商业化方案
 | 接口契约（本地 API / 适配器 / 数据交换） | [specs/001-sales-tool/contracts/](specs/001-sales-tool/contracts/) |
 | 运行与逐场景验收（S1–S12） | [specs/001-sales-tool/quickstart.md](specs/001-sales-tool/quickstart.md) |
 | 面向使用者的操作手册 | [docs/user-guide.md](docs/user-guide.md) |
-| 商业化路径与版本分层 | [docs/commercialization.md](docs/commercialization.md) |
 | 开发宪法与质量门 | [.specify/memory/constitution.md](.specify/memory/constitution.md) |
 | 当前进度（唯一事实源） | [specs/001-sales-tool/tasks.md](specs/001-sales-tool/tasks.md) 及 `specs/00x-*/tasks.md` 勾选状态 |
 
