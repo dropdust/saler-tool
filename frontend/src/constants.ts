@@ -65,3 +65,29 @@ export const SOURCE_LABELS: Record<string, string> = {
   harvest: '回灌',
   crawl: '爬取',
 }
+
+/**
+ * 任务类型 → 跳转路由（005 契约 §5）：任务中心/通知点击的落点。
+ * 未映射类型返回 null——调用方回退为"打开任务抽屉定位该任务"（不猜测落点）。
+ */
+export const JOB_TYPE_ROUTES: Record<string, string> = {
+  crawl: '/leads/jobs',
+  campaign_send: '/campaigns',
+  seed_discover: '/seeds/review',
+  ai_seed_expand: '/seeds/review',
+  ai_seed_translate: '/seeds/review',
+  ai_term_translate: '/seeds/graph-manage',
+  ingest_harvest: '/seeds/review',
+  seed_validate: '/seeds',
+  ai_content_draft: '/content',
+  ai_content_translate: '/content',
+  company_import: '/leads',
+  backup: '/settings/backup',
+  restore: '/settings/backup',
+  export_all: '/settings/backup',
+  data_dir_move: '/settings',
+}
+
+export function jobRoute(jobType: string): string | null {
+  return JOB_TYPE_ROUTES[jobType] ?? null
+}

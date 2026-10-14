@@ -23,6 +23,20 @@ const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000
 const RECENT_LIMIT = 20
 const LOG_LIMIT = 200
 
+// 结果摘要的中文标签（已知键；未知键忽略，避免把内部字段名直接示人）
+const RESULT_LABELS: Record<string, string> = {
+  contacts_created: '联系方式',
+  domains_found: '域名',
+  domains_done: '完成域名',
+  seeds_processed: '种子',
+  nodes_created: '节点',
+  edges_created: '关系',
+  seeds_created: '种子',
+  created: '新增',
+  sent: '已发送',
+  processed: '已处理',
+}
+
 export interface JobLogLine {
   level: string
   message: string
@@ -269,6 +283,21 @@ export const useJobCenterStore = defineStore('jobCenter', {
         text: '准备中…',
         indeterminate: job.status !== 'running',
       }
+    },
+
+    /** 终态结果摘要（抽屉"最近完成"与通知共用）：失败取错误信息，否则取已知结果键。 */
+    resultSummary(job: JobPayload): string {
+      if (job.status === 'failed') return job.error || '任务失败'
+      if (job.status === 'cancelled') return job.error || '已取消'
+      if (job.status === 'interrupted') return '应用退出导致中断'
+      const result = job.result ?? {}
+      const parts: string[] = []
+      for (const [key, label] of Object.entries(RESULT_LABELS)) {
+        const value = result[key]
+        if (typeof value === 'number' && value > 0) parts.push(`${label} ${value}`)
+        if (parts.length >= 4) break
+      }
+      return parts.join(' · ')
     },
 
     /** 通知抑制挂载点（T244 实现：用户主动取消不通知）。 */
