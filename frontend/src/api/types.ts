@@ -11,7 +11,7 @@ export interface JobPayload {
   id: number
   job_type: string
   name: string | null
-  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
   progress: Record<string, unknown>
   result: Record<string, unknown> | null
   error: string | null
@@ -20,6 +20,9 @@ export interface JobPayload {
   created_at: string | null
   started_at: string | null
   finished_at: string | null
+  /** 任务能力（目录派生，005 契约 §4）：前端据此渲染暂停/重跑按钮 */
+  can_pause: boolean
+  rerunnable: boolean
 }
 
 export interface GraphNode {

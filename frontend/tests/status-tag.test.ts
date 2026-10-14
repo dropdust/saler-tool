@@ -32,3 +32,12 @@ describe('StatusTag（审核域标签，F1）', () => {
     expect(mountTag({ status: 'weird' }).text()).toBe('weird')
   })
 })
+
+// 005 T229：任务中断态（启动对账写入的终态，契约 §2）
+describe('StatusTag（任务中断态）', () => {
+  it('interrupted → "已中断" 且配色 warning（区别于 failed/cancelled）', () => {
+    const wrapper = mountTag({ status: 'interrupted' })
+    expect(wrapper.text()).toBe('已中断')
+    expect(wrapper.find('.el-tag--warning').exists()).toBe(true)
+  })
+})

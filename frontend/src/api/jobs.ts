@@ -1,7 +1,7 @@
 import { api } from './client'
 import type { JobPayload } from './types'
 
-export const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled']
+export const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'interrupted']
 
 /**
  * 轮询任务直至终态（简单可靠）。

@@ -21,6 +21,7 @@ const TYPES: Record<string, string> = {
   completed: 'success',
   failed: 'danger',
   cancelled: 'info',
+  interrupted: 'warning',
 }
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
