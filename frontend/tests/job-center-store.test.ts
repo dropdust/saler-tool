@@ -237,3 +237,117 @@ describe('jobCenter store · 数据层', () => {
     expect(store.recentJobs[0]).toMatchObject({ id: 5, status: 'completed', finished_at: '2026-10-14T02:00:00+00:00' })
   })
 })
+
+describe('jobCenter store · 操作层', () => {
+  it('register：拉一次详情 + 立即可见 + 建立订阅（无需等 init）', async () => {
+    const store = await freshStore()
+    mockedApi.get.mockImplementationOnce(async () =>
+      jobRow({ id: 42, job_type: 'ai_seed_expand', name: 'AI 扩充种子', status: 'queued' }),
+    )
+
+    await store.register(42)
+
+    expect(mockedApi.get).toHaveBeenCalledWith('/jobs/42')
+    expect(store.activeJobs[42]).toMatchObject({ id: 42, status: 'queued' })
+    expect(FakeEventSource.instances.map((es) => es.url)).toEqual(['/jobs/42/events'])
+  })
+
+  it('control pause：以服务端回执状态落位', async () => {
+    stubLists([jobRow({ id: 5 })])
+    const store = await freshStore()
+    await store.init()
+    mockedApi.post.mockResolvedValueOnce({ ok: true, status: 'paused' })
+
+    await store.control(5, 'pause')
+
+    expect(mockedApi.post).toHaveBeenCalledWith('/jobs/5/pause')
+    expect(store.activeJobs[5].status).toBe('paused')
+  })
+
+  it('control cancel：本地收尾为 cancelled 并移入 recent（SSE 迟到不重复）', async () => {
+    stubLists([jobRow({ id: 5 })])
+    const store = await freshStore()
+    await store.init()
+    mockedApi.post.mockResolvedValueOnce({ ok: true, status: 'cancelled' })
+
+    await store.control(5, 'cancel')
+    await flushPromises()
+
+    expect(store.activeJobs[5]).toBeUndefined()
+    expect(store.recentJobs.filter((j) => j.id === 5)).toHaveLength(1)
+    expect(store.recentJobs[0]).toMatchObject({ id: 5, status: 'cancelled' })
+  })
+
+  it('waitFor：活跃任务在 done 事件后 resolve 终态', async () => {
+    stubLists([jobRow({ id: 5 })])
+    const store = await freshStore()
+    await store.init()
+
+    const pending = store.waitFor(5)
+    FakeEventSource.instances[0].emit('done', { result: { n: 2 } })
+
+    const done = await pending
+    expect(done).toMatchObject({ id: 5, status: 'completed' })
+    expect(done.result).toEqual({ n: 2 })
+  })
+
+  it('waitFor：未跟踪且已终态 → 立即返回详情（不建立孤儿订阅）', async () => {
+    const store = await freshStore()
+    mockedApi.get.mockImplementationOnce(async () => jobRow({ id: 7, status: 'completed' }))
+
+    const done = await store.waitFor(7)
+
+    expect(done.status).toBe('completed')
+    expect(FakeEventSource.instances).toHaveLength(0)
+  })
+
+  it('activeJobOfType：取该类型最新活跃任务；无则 null', async () => {
+    stubLists([
+      jobRow({ id: 5, job_type: 'crawl' }),
+      jobRow({ id: 6, job_type: 'ai_seed_expand' }),
+      jobRow({ id: 7, job_type: 'ai_seed_expand' }),
+    ])
+    const store = await freshStore()
+    await store.init()
+
+    expect(store.activeJobOfType('ai_seed_expand')?.id).toBe(7)
+    expect(store.activeJobOfType('backup')).toBeNull()
+  })
+
+  it.each([
+    [
+      'crawl 检索段',
+      { status: 'running', progress: { total_seeds: 10, seeds_processed: 2 } },
+      { percent: 10, text: '检索：2/10 条种子', indeterminate: false },
+    ],
+    [
+      'crawl 抓取段',
+      { status: 'running', progress: { total_domains: 4, fetched_domains: 2 } },
+      { percent: 75, text: '抓取：2/4 个域名', indeterminate: false },
+    ],
+    [
+      '通用 sent/total',
+      { status: 'running', progress: { total: 8, sent: 2 } },
+      { percent: 25, text: '2/8', indeterminate: false },
+    ],
+    [
+      '阶段化（无计数）',
+      { status: 'running', progress: { phase: 'calling_llm' } },
+      { percent: 0, text: '处理中：calling_llm', indeterminate: true },
+    ],
+    [
+      '完成',
+      { status: 'completed', progress: {} },
+      { percent: 100, text: '已完成', indeterminate: false },
+    ],
+    [
+      '已中断',
+      { status: 'interrupted', progress: {} },
+      { percent: 100, text: '已中断', indeterminate: false },
+    ],
+  ])('progressView：%s', async (_name, overrides, expected) => {
+    const store = await freshStore()
+    const view = store.progressView(jobRow(overrides) as never)
+    expect(view).toEqual(expected)
+  })
+})

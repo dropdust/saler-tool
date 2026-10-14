@@ -5,7 +5,9 @@ export const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'interrupt
 
 /**
  * 轮询任务直至终态（简单可靠）。
- * 需要流式进度的场景（长时间挖掘/发送）用 `composables/useJobEvents` 的 SSE。
+ *
+ * @deprecated 005 起以 `stores/jobCenter` 的 `waitFor(jobId)` 为唯一实现（全应用单一
+ * 订阅方，页内监控与任务中心同源）；存量调用点随各页面迁移后本函数删除。
  */
 export async function watchJob(
   jobId: number,

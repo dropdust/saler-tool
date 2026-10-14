@@ -30,6 +30,8 @@ export interface JobLogLine {
 
 // 订阅表模块级化：EventSource 不进 Pinia 响应式状态
 const subscriptions = new Map<number, EventSource>()
+// waitFor 的待决收尾表（终态在 _finalize 统一 resolve）
+const waiters = new Map<number, (job: JobPayload) => void>()
 
 function closeAllSubscriptions() {
   for (const source of subscriptions.values()) source.close()
@@ -169,10 +171,108 @@ export const useJobCenterStore = defineStore('jobCenter', {
         RECENT_LIMIT,
       )
       this._onTerminal(final)
+      waiters.get(final.id)?.(final)
+      waiters.delete(final.id)
     },
 
     /** 终态通知挂载点（T244 实现：ElNotification 一次 + 点击跳转）。 */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- T244 填充前为占位挂载点
     _onTerminal(_job: JobPayload) {},
+
+    /** 页面启动任务后立即登记：拉一次详情落位并订阅（不等下一次列表刷新）。 */
+    async register(jobId: number) {
+      try {
+        const detail = await api.get<JobPayload>(`/jobs/${jobId}`)
+        if (isTerminal(detail.status)) {
+          await this._finalize(detail)
+          return
+        }
+        this.activeJobs[jobId] = detail
+      } catch {
+        /* 详情拉取失败：仍建订阅，由快照补齐 */
+      }
+      this.ensureSubscribed(jobId)
+    },
+
+    /** 任务控制：pause/resume 以服务端回执状态落位；cancel 本地收尾（SSE 迟到经去重不重复）。 */
+    async control(jobId: number, action: 'pause' | 'resume' | 'cancel') {
+      const resp = await api.post<{ ok: boolean; status: string }>(`/jobs/${jobId}/${action}`)
+      const job = this.activeJobs[jobId]
+      if (action === 'cancel') {
+        this._suppressNotification(jobId)
+        await this._finalize({ ...(job as JobPayload), id: jobId, status: 'cancelled' })
+        return resp
+      }
+      if (job && resp?.status) this.activeJobs[jobId] = { ...job, status: resp.status }
+      return resp
+    },
+
+    /** 等待任务到达终态（取代 watchJob 的 await 语义；终态在 _finalize 统一 resolve）。 */
+    async waitFor(jobId: number): Promise<JobPayload> {
+      const existing =
+        this.activeJobs[jobId] ?? this.recentJobs.find((row) => row.id === jobId) ?? null
+      if (existing && isTerminal(existing.status)) return existing
+      if (!existing) {
+        const detail = await api.get<JobPayload>(`/jobs/${jobId}`)
+        if (isTerminal(detail.status)) return detail
+        this.activeJobs[jobId] = detail
+        this.ensureSubscribed(jobId)
+      } else {
+        this.ensureSubscribed(jobId)
+      }
+      return new Promise((resolve) => {
+        waiters.set(jobId, resolve)
+      })
+    },
+
+    /** 该类型的最新活跃任务（对话框重开判定，T239~T241；无则 null）。 */
+    activeJobOfType(jobType: string): JobPayload | null {
+      const matches = this.activeList.filter((job) => job.job_type === jobType)
+      return matches[0] ?? null
+    },
+
+    /** 抽屉/页内监控共用的进度视图：百分比或阶段化文案（R8，口径沿用 CrawlJobs）。 */
+    progressView(job: JobPayload): { percent: number; text: string; indeterminate: boolean } {
+      const p = job.progress ?? {}
+      const num = (value: unknown) => (typeof value === 'number' ? value : 0)
+      if (job.status === 'completed') return { percent: 100, text: '已完成', indeterminate: false }
+      if (job.status === 'failed') return { percent: 100, text: '失败', indeterminate: false }
+      if (job.status === 'cancelled') return { percent: 100, text: '已取消', indeterminate: false }
+      if (job.status === 'interrupted') return { percent: 100, text: '已中断', indeterminate: false }
+      if (num(p.total_seeds)) {
+        return {
+          percent: Math.min(99, Math.round((num(p.seeds_processed) / num(p.total_seeds)) * 50)),
+          text: `检索：${num(p.seeds_processed)}/${num(p.total_seeds)} 条种子`,
+          indeterminate: false,
+        }
+      }
+      if (num(p.total_domains)) {
+        return {
+          percent: Math.min(99, 50 + Math.round((num(p.fetched_domains) / num(p.total_domains)) * 50)),
+          text: `抓取：${num(p.fetched_domains)}/${num(p.total_domains)} 个域名`,
+          indeterminate: false,
+        }
+      }
+      if (num(p.total) && (typeof p.sent === 'number' || typeof p.done === 'number')) {
+        const done = num(p.sent) + num(p.done)
+        return {
+          percent: Math.min(99, Math.round((done / num(p.total)) * 100)),
+          text: `${done}/${num(p.total)}`,
+          indeterminate: false,
+        }
+      }
+      if (typeof p.phase === 'string' && p.phase) {
+        return { percent: 0, text: `处理中：${p.phase}`, indeterminate: true }
+      }
+      return {
+        percent: job.status === 'running' ? 5 : 0,
+        text: '准备中…',
+        indeterminate: job.status !== 'running',
+      }
+    },
+
+    /** 通知抑制挂载点（T244 实现：用户主动取消不通知）。 */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- T244 填充前为占位挂载点
+    _suppressNotification(_jobId: number) {},
   },
 })
