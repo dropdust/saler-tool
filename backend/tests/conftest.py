@@ -70,12 +70,14 @@ def wait_job(client, job_id: int, timeout: float = 10.0) -> dict:
     """轮询任务直至终态（测试助手）。"""
     import time
 
+    from saler.jobs.engine import TERMINAL_STATUSES
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         resp = client.get(f"/api/v1/jobs/{job_id}")
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        if data["status"] in ("completed", "failed", "cancelled"):
+        if data["status"] in TERMINAL_STATUSES:
             return data
         time.sleep(0.05)
     raise AssertionError(f"任务 {job_id} 超时未完成")

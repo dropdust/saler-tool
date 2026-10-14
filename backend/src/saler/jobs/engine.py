@@ -18,7 +18,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from saler.db.models import Job
 from saler.jobs.events import EventBus, JobEvent
 
-TERMINAL_STATUSES = ("completed", "failed", "cancelled")
+JOB_STATUSES = ("queued", "running", "paused", "completed", "failed", "cancelled", "interrupted")
+TERMINAL_STATUSES = ("completed", "failed", "cancelled", "interrupted")
+# `interrupted` 仅由启动对账写入（jobs/reconcile.py）：进程退出遗留的非终态任务；
+# 作为终态参与 cancel 守卫与 SSE 终态路径（jobs.py），不得出现在运行时转移中。
 
 
 class JobCancelled(Exception):

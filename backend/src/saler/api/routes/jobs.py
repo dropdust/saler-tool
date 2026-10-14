@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from saler.api.deps import get_session, paginate, pagination
-from saler.api.errors import conflict, not_found
+from saler.api.errors import conflict, not_found, unprocessable
 from saler.api.serializers import job_to_dict
 from saler.db.models import Job
-from saler.jobs.engine import TERMINAL_STATUSES
+from saler.jobs.engine import JOB_STATUSES, TERMINAL_STATUSES
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -24,12 +24,19 @@ def list_jobs(
     page_params: tuple[int, int] = Depends(pagination),
     db: Session = Depends(get_session),
 ) -> dict:
+    """任务列表。`status` 支持逗号多值（`running,paused,queued`）；未知状态值 422（契约 §1）。"""
     page, page_size = page_params
     q = db.query(Job).order_by(Job.id.desc())
     if job_type:
         q = q.filter(Job.job_type == job_type)
     if status:
-        q = q.filter(Job.status == status)
+        statuses = [token.strip() for token in status.split(",")]
+        statuses = [token for token in statuses if token]
+        unknown = [token for token in statuses if token not in JOB_STATUSES]
+        if unknown:
+            raise unprocessable(f"未知任务状态：{', '.join(unknown)}（可选：{', '.join(JOB_STATUSES)}）")
+        if statuses:
+            q = q.filter(Job.status.in_(statuses))
     result = paginate(q, page, page_size)
     result["items"] = [job_to_dict(j) for j in result["items"]]
     return result
@@ -58,8 +65,7 @@ async def job_events(job_id: int, request: Request, db: Session = Depends(get_se
         try:
             yield {"event": "progress", "data": json.dumps({"snapshot": snapshot}, ensure_ascii=False)}
             if terminal:
-                event_name = "error" if job.status == "failed" else "done"
-                yield {"event": event_name, "data": json.dumps(snapshot, ensure_ascii=False)}
+                yield _terminal_event(job.status, snapshot)
                 return
             while True:
                 event = await queue.get()
@@ -70,6 +76,29 @@ async def job_events(job_id: int, request: Request, db: Session = Depends(get_se
             manager.bus.discard(job_id, queue)
 
     return EventSourceResponse(gen(), ping=30)
+
+
+_TERMINAL_ERROR_CODES = {
+    "failed": "job_failed",
+    "cancelled": "cancelled",
+    "interrupted": "interrupted",
+}
+_TERMINAL_ERROR_MESSAGES = {
+    "failed": "任务失败",
+    "cancelled": "任务已取消",
+    "interrupted": "应用退出导致任务中断",
+}
+
+
+def _terminal_event(status: str, snapshot: dict) -> dict:
+    """终态快照分派（契约 §2 修正）：completed → done（载荷=快照，含 result）；
+    其余终态 → error(code)——修正前除 failed 外一律发 done，已取消/已中断被订阅方误示为"完成"。
+    """
+    if status == "completed":
+        return {"event": "done", "data": json.dumps(snapshot, ensure_ascii=False)}
+    code = _TERMINAL_ERROR_CODES.get(status, "job_failed")
+    message = _TERMINAL_ERROR_MESSAGES.get(status, "任务已结束")
+    return {"event": "error", "data": json.dumps({"code": code, "message": message}, ensure_ascii=False)}
 
 
 def _control(job_id: int, request: Request, action: str) -> dict:
