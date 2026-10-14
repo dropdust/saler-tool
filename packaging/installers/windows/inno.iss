@@ -12,7 +12,7 @@
 #endif
 #define MyAppPublisher "Saler"
 #define MyAppExeName "SalerTool.exe"
-#define DistDir "..\..\backend\dist\SalerTool"
+#define DistDir "..\..\..\backend\dist\SalerTool"
 
 [Setup]
 AppId={{8F2A6C2E-4B1D-4C7E-9A2B-7E5C0B1D5F31}
@@ -21,7 +21,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\SalerTool
 DefaultGroupName={#MyAppName}
-OutputDir=..\..\backend\dist\installer
+OutputDir=..\..\..\backend\dist\installer
 OutputBaseFilename=SalerTool-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
