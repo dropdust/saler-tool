@@ -32,7 +32,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # 必须 ≥11：frontend/pnpm-workspace.yaml 为 pnpm 11 语义（仅 allowBuilds、无 packages 字段），
+          # pnpm 9 会以 "packages field missing or empty" 秒退（曾致 CI 前端长期红）
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 20
