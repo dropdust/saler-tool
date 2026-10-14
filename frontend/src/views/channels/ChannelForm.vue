@@ -86,20 +86,22 @@
       </el-form-item>
 
       <el-divider content-position="left">发送限制</el-divider>
+      <!-- 数值参数：三列并排时列内放不下「左 label + 150px 控件」，label 置顶并让控件撑满列宽，
+           否则 el-input-number 被 flex 压缩后内部输入区塌缩到不可读、不可键入 -->
       <el-row :gutter="12">
         <el-col :span="8">
-          <el-form-item label="每日上限" label-width="90px">
-            <el-input-number v-model="form.daily_limit" :min="0" />
+          <el-form-item label="每日上限" label-position="top">
+            <el-input-number v-model="form.daily_limit" :min="0" style="width: 100%" />
           </el-form-item>
         </el-col>
         <el-col :span="8">
-          <el-form-item label="条/分钟" label-width="90px">
-            <el-input-number v-model="form.rate_per_minute" :min="1" />
+          <el-form-item label="条/分钟" label-position="top">
+            <el-input-number v-model="form.rate_per_minute" :min="1" style="width: 100%" />
           </el-form-item>
         </el-col>
         <el-col :span="8">
-          <el-form-item label="并发" label-width="70px">
-            <el-input-number v-model="form.concurrency" :min="1" :max="10" />
+          <el-form-item label="并发" label-position="top">
+            <el-input-number v-model="form.concurrency" :min="1" :max="10" style="width: 100%" />
           </el-form-item>
         </el-col>
       </el-row>

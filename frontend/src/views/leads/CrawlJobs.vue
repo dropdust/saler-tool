@@ -70,20 +70,33 @@
             <el-option v-for="seed in candidateSeeds" :key="seed.id" :value="seed.id" :label="seed.query" />
           </el-select>
         </el-form-item>
+        <!-- 数值参数：三列并排时列内放不下「左 label + 150px 控件」，label 置顶并让控件撑满列宽，
+             否则 el-input-number 被 flex 压缩后内部输入区塌缩为 0，数值无法查看与键入 -->
         <el-row :gutter="12">
           <el-col :span="8">
-            <el-form-item label="并发">
-              <el-input-number v-model="config.concurrency" :min="1" :max="10" />
+            <el-form-item label="并发" label-position="top">
+              <el-input-number v-model="config.concurrency" :min="1" :max="10" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="单站间隔（秒）">
-              <el-input-number v-model="config.per_host_delay_s" :min="0.2" :max="10" :step="0.2" />
+            <el-form-item label="单站间隔（秒）" label-position="top">
+              <el-input-number
+                v-model="config.per_host_delay_s"
+                :min="0.2"
+                :max="10"
+                :step="0.2"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="单站页数">
-              <el-input-number v-model="config.max_pages_per_site" :min="1" :max="20" />
+            <el-form-item label="单站页数" label-position="top">
+              <el-input-number
+                v-model="config.max_pages_per_site"
+                :min="1"
+                :max="20"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
         </el-row>
