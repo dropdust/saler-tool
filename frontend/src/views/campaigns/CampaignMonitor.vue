@@ -151,11 +151,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../../api/client'
-import { useJobEvents } from '../../composables/useJobEvents'
+import { TERMINAL_STATUSES } from '../../api/jobs'
+import { useJobCenterStore } from '../../stores/jobCenter'
 import type { CampaignRow } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
@@ -170,15 +171,35 @@ const testSending = ref(false)
 const selected = ref<CampaignRow | null>(null)
 const wizardRef = ref<InstanceType<typeof CampaignWizard> | null>(null)
 
-const { subscribe } = useJobEvents()
-const live = ref<Record<string, number> | null>(null)
-const liveDone = ref(false)
-const logs = ref<string[]>([])
+// 实时监控一律读全局任务中心 store（同源一致 FR-008；进入页面自动选中活跃发送）
+const store = useJobCenterStore()
+
+const campaignJob = computed(() => {
+  const jobId = selected.value?.active_job_id
+  if (jobId == null) return null
+  return store.activeJobs[jobId] ?? store.recentJobs.find((job) => job.id === jobId) ?? null
+})
+
+const live = computed<Record<string, number> | null>(() => {
+  const job = campaignJob.value
+  if (!job) return null
+  const entries = Object.entries(job.progress ?? {}).filter(([, value]) => typeof value === 'number')
+  if (!entries.length && !TERMINAL_STATUSES.includes(job.status)) return null
+  return Object.fromEntries(entries) as Record<string, number>
+})
+const liveDone = computed(
+  () => !!campaignJob.value && TERMINAL_STATUSES.includes(campaignJob.value.status),
+)
+const logs = computed(() => {
+  const id = campaignJob.value?.id
+  if (id === undefined) return []
+  return (store.logs[id] ?? []).map((line) => line.message)
+})
 
 const livePercentage = computed(() => {
   if (!live.value) return 0
   const total = live.value.total || 0
-  if (!total) return selected.value?.status === 'completed' ? 100 : 0
+  if (!total) return liveDone.value ? 100 : 0
   const done = (live.value.sent || 0) + (live.value.failed || 0) + (live.value.bounced || 0)
     + (live.value.skipped || 0) + (live.value.suppressed || 0)
   return Math.min(Math.round((done / total) * 100), 100)
@@ -199,40 +220,44 @@ async function load() {
       const current = items.value.find((item) => item.id === selected.value?.id)
       if (current) selected.value = current
     }
+    autoSelect()
   } finally {
     loading.value = false
   }
 }
 
+/** 进入页面自动选中活跃发送计划（store.init 可能晚于本页挂载，watch 兜底补选） */
+function autoSelect() {
+  if (selected.value) return
+  const job = store.activeJobOfType('campaign_send')
+  if (!job || job.ref_type !== 'campaign' || job.ref_id == null) return
+  const row = items.value.find((item) => item.id === job.ref_id)
+  if (row) void selectRow(row)
+}
+watch(() => store.activeList, autoSelect)
+
 async function selectRow(row: CampaignRow | null) {
   if (!row) return
   selected.value = await api.get<CampaignRow>(`/campaigns/${row.id}`)
-  live.value = null
-  liveDone.value = false
-  logs.value = []
-  if (selected.value.active_job_id) attachJob(selected.value.active_job_id)
+  attachJob()
 }
 
-function attachJob(jobId: number) {
-  subscribe(jobId, {
-    onProgress: (data) => {
-      if (data.snapshot) return
-      live.value = data as Record<string, number>
-    },
-    onLog: (data) => logs.value.push(data.message),
-    onDone: async (data) => {
-      liveDone.value = true
-      logs.value.push(`任务完成：${JSON.stringify(data.result ?? {})}`)
+/** 确保 store 正在跟踪该计划的任务（未跟踪则 register 自愈：拉详情 + 订阅） */
+function attachJob() {
+  const jobId = selected.value?.active_job_id
+  if (jobId != null && !store.activeJobs[jobId]) void store.register(jobId)
+}
+
+// store 中任务到达终态 → 刷新计划详情与列表（取代旧 onDone 回调）
+watch(
+  () => campaignJob.value?.status,
+  async (status) => {
+    if (status && TERMINAL_STATUSES.includes(status)) {
       await refreshSelected()
       await load()
-    },
-    onError: async (data) => {
-      liveDone.value = true
-      logs.value.push(`任务失败：${data.message ?? data.code ?? ''}`)
-      await refreshSelected()
-    },
-  })
-}
+    }
+  },
+)
 
 async function refreshSelected() {
   if (!selected.value) return
@@ -244,13 +269,10 @@ async function start(row: CampaignRow) {
   try {
     const pendingRound = (row.rounds || []).find((round) => round.status === 'pending')
     const roundNo = pendingRound?.round_no ?? 1
-    const result = await api.post<{ job_id: number }>(
-      `/campaigns/${row.id}/rounds/${roundNo}/start`,
-    )
-    ElMessage.success(`第 ${roundNo} 轮已启动`)
+    await api.post<{ job_id: number }>(`/campaigns/${row.id}/rounds/${roundNo}/start`)
+    ElMessage.success(`第 ${roundNo} 轮已启动（进度可在任务中心随时查看）`)
     selected.value = row
     await selectRow(row)
-    attachJob(result.job_id)
     await load()
   } finally {
     busyId.value = null
@@ -270,6 +292,9 @@ async function control(row: CampaignRow, action: 'pause' | 'resume' | 'cancel') 
   await api.post(`/campaigns/${row.id}/${action}`)
   ElMessage.success({ pause: '已暂停', resume: '已恢复', cancel: '已中止' }[action])
   await refreshSelected()
+  // 控制经 /campaigns 端点（带外）：同步 store 中该任务的状态（FR-008 两处一致）
+  const jobId = selected.value?.active_job_id
+  if (jobId != null) await store.refresh(jobId)
   await load()
 }
 

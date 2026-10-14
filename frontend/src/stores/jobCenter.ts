@@ -239,6 +239,22 @@ export const useJobCenterStore = defineStore('jobCenter', {
       })
     },
 
+    /** 带外控制后的状态同步：拉取最新行落位（终态走收尾）。best-effort，失败返回 null。 */
+    async refresh(jobId: number): Promise<JobPayload | null> {
+      try {
+        const detail = await api.get<JobPayload>(`/jobs/${jobId}`)
+        if (isTerminal(detail.status)) {
+          await this._finalize(detail)
+        } else {
+          this.activeJobs[jobId] = detail
+          this.ensureSubscribed(jobId)
+        }
+        return detail
+      } catch {
+        return null
+      }
+    },
+
     /** 该类型的最新活跃任务（对话框重开判定，T239~T241；无则 null）。 */
     activeJobOfType(jobType: string): JobPayload | null {
       const matches = this.activeList.filter((job) => job.job_type === jobType)

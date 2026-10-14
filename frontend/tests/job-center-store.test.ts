@@ -351,3 +351,37 @@ describe('jobCenter store · 操作层', () => {
     expect(view).toEqual(expected)
   })
 })
+
+describe('jobCenter store · refresh（带外控制后的状态同步）', () => {
+  it('refresh：非终态 → 以服务端最新行更新（如计划页经 /campaigns 控制的暂停）', async () => {
+    stubLists([jobRow({ id: 9, job_type: 'campaign_send' })])
+    const store = await freshStore()
+    await store.init()
+    mockedApi.get.mockImplementationOnce(async () => jobRow({ id: 9, job_type: 'campaign_send', status: 'paused' }))
+
+    await store.refresh(9)
+
+    expect(mockedApi.get).toHaveBeenCalledWith('/jobs/9')
+    expect(store.activeJobs[9].status).toBe('paused')
+  })
+
+  it('refresh：终态 → 走终态收尾（移入 recent）', async () => {
+    stubLists([jobRow({ id: 9, job_type: 'campaign_send' })])
+    const store = await freshStore()
+    await store.init()
+    mockedApi.get.mockImplementationOnce(async () =>
+      jobRow({ id: 9, job_type: 'campaign_send', status: 'completed', result: { sent: 5 } }),
+    )
+
+    await store.refresh(9)
+
+    expect(store.activeJobs[9]).toBeUndefined()
+    expect(store.recentJobs[0]).toMatchObject({ id: 9, status: 'completed' })
+  })
+
+  it('refresh：失败不抛出（best-effort 同步）', async () => {
+    const store = await freshStore()
+    mockedApi.get.mockRejectedValueOnce(new Error('down'))
+    await expect(store.refresh(9)).resolves.toBeNull()
+  })
+})
