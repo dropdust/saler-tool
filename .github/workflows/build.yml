@@ -118,7 +118,9 @@ jobs:
             ls "/c/Program Files (x86)/" | while IFS= read -r line; do echo "::error::pf86: $line"; done
             exit 1
           fi
-          "$ISCC" "/DMyAppVersion=$ver" packaging/installers/windows/inno.iss > /tmp/iscc.log 2>&1 || diag iscc /tmp/iscc.log
+          # MSYS2_ARG_CONV_EXCL：git-bash 会把 /DMyAppVersion=… 当路径转成 D:\…（ISCC 报
+          # "You may not specify more than one script filename"），对该调用禁用路径转换
+          MSYS2_ARG_CONV_EXCL='*' "$ISCC" "/DMyAppVersion=$ver" packaging/installers/windows/inno.iss > /tmp/iscc.log 2>&1 || diag iscc /tmp/iscc.log
           ls -la backend/dist/installer
 
       - name: 打包安装器（macOS：zip，未签名）
