@@ -260,3 +260,118 @@ describe('JOB_TYPE_ROUTES 路由映射', () => {
     expect(isAiJobType('backup')).toBe(false)
   })
 })
+
+describe('TaskCenter · 已中断与重跑（T275）', () => {
+  beforeEach(() => {
+    get.mockReset()
+    get.mockResolvedValue({ total: 0, items: [] })
+  })
+
+  async function openWithRecent(recent: unknown[]) {
+    const { wrapper, store } = await mountCenter()
+    store.recentJobs = recent as never
+    await wrapper.find('[data-test="task-center-trigger"]').trigger('click')
+    await flushPromises()
+    return { wrapper, store }
+  }
+
+  function cardWith(name: string): HTMLElement {
+    return [...drawerEl().querySelectorAll<HTMLElement>('[data-test="recent-job"]')].find((el) =>
+      el.textContent?.includes(name),
+    )!
+  }
+
+  it('按钮显隐矩阵：终态且非 completed 的 rerunnable 才亮出', async () => {
+    await openWithRecent([
+      jobRow({
+        id: 1,
+        name: '已中断挖掘',
+        status: 'interrupted',
+        rerunnable: true,
+        finished_at: '2026-10-15T02:00:00',
+      }),
+      jobRow({
+        id: 2,
+        name: '已完成挖掘',
+        status: 'completed',
+        rerunnable: true,
+        finished_at: '2026-10-15T02:00:00',
+      }),
+      jobRow({
+        id: 3,
+        name: '已中断发送',
+        status: 'interrupted',
+        job_type: 'campaign_send',
+        rerunnable: false,
+        finished_at: '2026-10-15T02:00:00',
+      }),
+      jobRow({
+        id: 4,
+        name: '失败的备份',
+        status: 'failed',
+        job_type: 'backup',
+        rerunnable: false,
+        finished_at: '2026-10-15T02:00:00',
+      }),
+    ])
+
+    expect(cardWith('已中断挖掘').querySelector('[data-test="job-rerun"]')).not.toBeNull()
+    expect(cardWith('已中断挖掘').textContent).toContain('已中断')
+    expect(cardWith('已完成挖掘').querySelector('[data-test="job-rerun"]')).toBeNull()
+    expect(cardWith('已中断发送').querySelector('[data-test="job-rerun"]')).toBeNull()
+    expect(cardWith('失败的备份').querySelector('[data-test="job-rerun"]')).toBeNull()
+  })
+
+  it('不可重跑类型的已中断任务给指引文案，可重跑的不给', async () => {
+    await openWithRecent([
+      jobRow({ id: 1, name: '已中断挖掘', status: 'interrupted', finished_at: '2026-10-15T02:00:00' }),
+      jobRow({
+        id: 2,
+        name: '已中断发送',
+        status: 'interrupted',
+        job_type: 'campaign_send',
+        rerunnable: false,
+        finished_at: '2026-10-15T02:00:00',
+      }),
+    ])
+
+    expect(cardWith('已中断发送').querySelector('[data-test="rerun-guide"]')?.textContent).toContain(
+      '请前往相关页面重新发起',
+    )
+    expect(cardWith('已中断挖掘').querySelector('[data-test="rerun-guide"]')).toBeNull()
+  })
+
+  it('点击「重新运行」→ store.rerun(原任务) 并提示已登记', async () => {
+    const { store } = await openWithRecent([
+      jobRow({
+        id: 41,
+        name: '已中断挖掘',
+        status: 'interrupted',
+        finished_at: '2026-10-15T02:00:00',
+      }),
+    ])
+    const rerun = vi.spyOn(store, 'rerun').mockResolvedValue({ job_id: 57 } as never)
+
+    ;(cardWith('已中断挖掘').querySelector('[data-test="job-rerun"]') as HTMLElement).click()
+    await flushPromises()
+
+    expect(rerun).toHaveBeenCalledWith(41)
+  })
+
+  it('守卫失败：不崩（服务端回执由 api 客户端统一提示）', async () => {
+    const { store } = await openWithRecent([
+      jobRow({
+        id: 41,
+        name: '已中断挖掘',
+        status: 'interrupted',
+        finished_at: '2026-10-15T02:00:00',
+      }),
+    ])
+    vi.spyOn(store, 'rerun').mockRejectedValue(new Error('任务已完成，无需重新运行'))
+
+    ;(cardWith('已中断挖掘').querySelector('[data-test="job-rerun"]') as HTMLElement).click()
+    await flushPromises()
+
+    expect(cardWith('已中断挖掘')).not.toBeNull() // 抽屉仍在，未因异常中断渲染
+  })
+})

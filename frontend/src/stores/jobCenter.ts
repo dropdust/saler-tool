@@ -223,6 +223,19 @@ export const useJobCenterStore = defineStore('jobCenter', {
       this.ensureSubscribed(jobId)
     },
 
+    /**
+     * 重新运行（FR-018/T275）：POST 后立即登记新任务（拉详情 + 订阅，不等下一次列表刷新）。
+     * 守卫失败（not_rerunnable/not_terminal/already_completed）原样抛出——
+     * 服务端回执文案由 api 客户端统一提示，调用方只需兜住 Promise。
+     */
+    async rerun(jobId: number): Promise<{ job_id: number } & Record<string, unknown>> {
+      const resp = await api.post<{ job_id: number } & Record<string, unknown>>(
+        `/jobs/${jobId}/rerun`,
+      )
+      await this.register(resp.job_id)
+      return resp
+    },
+
     /** 任务控制：pause/resume 以服务端回执状态落位；cancel 本地收尾（SSE 迟到经去重不重复）。 */
     async control(jobId: number, action: 'pause' | 'resume' | 'cancel') {
       const resp = await api.post<{ ok: boolean; status: JobPayload['status'] }>(

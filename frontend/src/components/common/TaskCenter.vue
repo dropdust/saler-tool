@@ -78,7 +78,24 @@
           </div>
           <div class="row meta">
             <span class="summary">{{ store.resultSummary(job) }}</span>
+            <span
+              v-if="job.status === 'interrupted' && !job.rerunnable"
+              class="muted"
+              data-test="rerun-guide"
+            >
+              不支持重跑，请前往相关页面重新发起
+            </span>
             <span class="spacer" />
+            <el-button
+              v-if="job.rerunnable && job.status !== 'completed'"
+              size="small"
+              type="warning"
+              plain
+              data-test="job-rerun"
+              @click="rerun(job)"
+            >
+              重新运行
+            </el-button>
             <el-button
               v-if="isAiJobType(job.job_type)"
               size="small"
@@ -103,6 +120,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 
 import StatusTag from './StatusTag.vue'
@@ -146,6 +164,16 @@ function view(job: JobPayload) {
 
 async function control(job: JobPayload, action: 'pause' | 'resume' | 'cancel') {
   await store.control(job.id, action)
+}
+
+/** 重新运行已失败/已取消/已中断的可重跑任务；守卫失败的文案由 api 客户端按服务端回执提示 */
+async function rerun(job: JobPayload) {
+  try {
+    await store.rerun(job.id)
+    ElMessage.success('已重新运行')
+  } catch {
+    /* 客户端已提示（not_rerunnable / not_terminal / already_completed） */
+  }
 }
 
 function go(job: JobPayload) {
@@ -195,6 +223,10 @@ function openCalls(job: JobPayload) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.muted {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .job-name {
   flex: 1;

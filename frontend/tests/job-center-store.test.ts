@@ -393,3 +393,26 @@ describe('jobCenter store · refresh（带外控制后的状态同步）', () =>
     await expect(store.refresh(9)).resolves.toBeNull()
   })
 })
+
+describe('jobCenter store · rerun（T275）', () => {
+  it('POST /jobs/{id}/rerun 后登记新任务：拉详情落位并订阅（不等下一次列表刷新）', async () => {
+    const store = await freshStore()
+    mockedApi.post.mockResolvedValue({ job_id: 57 })
+    mockedApi.get.mockResolvedValue(jobRow({ id: 57, name: '客户线索挖掘', status: 'queued' }))
+
+    const resp = await store.rerun(41)
+
+    expect(mockedApi.post).toHaveBeenCalledWith('/jobs/41/rerun')
+    expect(resp).toMatchObject({ job_id: 57 })
+    expect(store.activeJobs[57]).toMatchObject({ id: 57, status: 'queued' })
+    expect(FakeEventSource.instances.map((es) => es.url)).toContain('/jobs/57/events')
+  })
+
+  it('守卫失败（如 not_terminal）：原样抛出，交由调用方呈现服务端回执', async () => {
+    const store = await freshStore()
+    mockedApi.post.mockRejectedValue(new Error('任务尚未结束（running），无法重新运行'))
+
+    await expect(store.rerun(41)).rejects.toThrow('无法重新运行')
+    expect(store.activeJobs[41]).toBeUndefined()
+  })
+})
