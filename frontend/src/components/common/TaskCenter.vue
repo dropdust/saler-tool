@@ -91,6 +91,7 @@
               size="small"
               type="warning"
               plain
+              :loading="rerunning.has(job.id)"
               data-test="job-rerun"
               @click="rerun(job)"
             >
@@ -166,13 +167,22 @@ async function control(job: JobPayload, action: 'pause' | 'resume' | 'cancel') {
   await store.control(job.id, action)
 }
 
+// 重跑在途表（任务 id → 请求未回执）：重跑是"新建任务"，连点会重复建单——
+// 在途期间按钮 loading 禁用，同一 tick 内的第二击由这里兜住（渲染尚未更新时 loading 还没生效）
+const rerunning = ref(new Set<number>())
+
 /** 重新运行已失败/已取消/已中断的可重跑任务；守卫失败的文案由 api 客户端按服务端回执提示 */
 async function rerun(job: JobPayload) {
+  if (rerunning.value.has(job.id)) return
+  rerunning.value.add(job.id)
   try {
     await store.rerun(job.id)
     ElMessage.success('已重新运行')
   } catch {
     /* 客户端已提示（not_rerunnable / not_terminal / already_completed） */
+  } finally {
+    // 只防连点、不做长冷却：回执后恢复可点（失败后允许再试，成功后再重跑也是用户自觉的）
+    rerunning.value.delete(job.id)
   }
 }
 

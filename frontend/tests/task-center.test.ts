@@ -358,6 +358,42 @@ describe('TaskCenter · 已中断与重跑（T275）', () => {
     expect(rerun).toHaveBeenCalledWith(41)
   })
 
+  it('连点两次只发一次请求：在途禁用到回执为止（T277 防抖）', async () => {
+    const { store } = await openWithRecent([
+      jobRow({
+        id: 41,
+        name: '已中断挖掘',
+        status: 'interrupted',
+        finished_at: '2026-10-15T02:00:00',
+      }),
+    ])
+    // 挂起的重跑（回执前按钮必须保持不可再点）——重跑会新建任务，重复点击=重复建单
+    let release!: (value: { job_id: number } & Record<string, unknown>) => void
+    const gate = new Promise<{ job_id: number } & Record<string, unknown>>((resolve) => {
+      release = resolve
+    })
+    const rerun = vi.spyOn(store, 'rerun').mockReturnValue(gate)
+
+    const btn = cardWith('已中断挖掘').querySelector<HTMLButtonElement>('[data-test="job-rerun"]')!
+    btn.click()
+    btn.click() // 同一 tick 内连点：此时尚未重渲染（loading 未生效），由组件内在途判定兜住
+    await flushPromises()
+
+    expect(rerun).toHaveBeenCalledTimes(1)
+    expect(btn.disabled).toBe(true) // 在途禁用（loading ⇒ 原生 disabled）
+    btn.click() // 重渲染后再点一次
+    await flushPromises()
+    expect(rerun).toHaveBeenCalledTimes(1)
+
+    release({ job_id: 57 })
+    await flushPromises()
+    // 回执后恢复可点：重跑是用户自觉触发的操作，只防连点、不做长冷却
+    expect(btn.disabled).toBe(false)
+    btn.click()
+    await flushPromises()
+    expect(rerun).toHaveBeenCalledTimes(2)
+  })
+
   it('守卫失败：不崩（服务端回执由 api 客户端统一提示）', async () => {
     const { store } = await openWithRecent([
       jobRow({
