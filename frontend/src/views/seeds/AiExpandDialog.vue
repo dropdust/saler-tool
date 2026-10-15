@@ -57,10 +57,20 @@
     </el-form>
     <template #footer>
       <el-button @click="visible = false">关闭</el-button>
+      <el-button
+        v-if="finishedJobId"
+        data-test="expand-view-calls"
+        @click="openCalls"
+      >
+        查看调用明细
+      </el-button>
       <el-button v-if="summary" type="success" plain @click="goReview">去审核</el-button>
       <el-button type="primary" :loading="running" @click="submit">开始扩充</el-button>
     </template>
   </el-dialog>
+
+  <!-- 本次任务的模型调用入参/出参（T267 抽屉；append-to-body 叠在对话框上） -->
+  <LlmCallsDrawer ref="callsDrawer" />
 </template>
 
 <script setup lang="ts">
@@ -69,6 +79,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
 import { watchJob } from '../../api/jobs'
+import LlmCallsDrawer from '../../components/common/LlmCallsDrawer.vue'
 import type { GraphNode, Paginated } from '../../api/types'
 import { NODE_TYPE_LABELS } from '../../constants'
 
@@ -78,6 +89,9 @@ const running = ref(false)
 const progressText = ref('')
 const summary = ref<Record<string, number> | null>(null)
 const nodes = ref<GraphNode[]>([])
+/** 本次提交产生的任务（成功/失败都保留）——明细入口按它过滤 */
+const finishedJobId = ref<number | null>(null)
+const callsDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
 const router = useRouter()
 const form = ref({
   description: '',
@@ -97,6 +111,13 @@ function reset() {
   progressText.value = ''
   summary.value = null
   running.value = false
+  finishedJobId.value = null
+}
+
+/** 查看本次任务发给模型的入参与原始出参（失败时尤其有用） */
+function openCalls() {
+  if (finishedJobId.value == null) return
+  callsDrawer.value?.open({ jobId: finishedJobId.value, title: 'AI 调用明细 · 种子扩充' })
 }
 
 async function submit() {
@@ -115,6 +136,7 @@ async function submit() {
       else if (phase) progressText.value = `处理中：${phase}`
       else progressText.value = '处理中…'
     })
+    finishedJobId.value = job_id // 终态后亮出「查看调用明细」（成功/失败都可以看）
     if (job.status === 'completed') {
       summary.value = (job.result ?? {}) as Record<string, number>
       ElMessage.success('扩充完成：结果已进入待审核')
