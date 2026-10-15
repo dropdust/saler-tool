@@ -54,6 +54,20 @@ def test_ai_calls_lists_attempts_newest_first(client, session_factory):
     assert last["ts"] is not None and last["provider"] == "DeepSeek"
 
 
+def test_ai_calls_exposes_running_attempt_as_null_ok(client, session_factory):
+    """进行中的尝试（请求已发出、尚未返回）以 ok=null 暴露——前端据此显示"进行中 + 已等待"。"""
+    from saler.providers.llm.call_log import make_call_recorder
+
+    make_call_recorder(session_factory, job_id=11, operation="seed_expand")(
+        _payload(event="start", ok=None, latency_ms=None, response_text=None)
+    )
+    data = client.get("/api/v1/ai/calls", params={"job_id": 11}).json()
+    assert data["total"] == 1
+    row = data["items"][0]
+    assert row["ok"] is None and row["latency_ms"] is None
+    assert row["request_messages"][1]["content"].startswith("业务描述")  # 卡住时也能看到入参
+
+
 def test_ai_calls_filters_by_operation_and_job(client, session_factory):
     from saler.providers.llm.call_log import make_call_recorder
 

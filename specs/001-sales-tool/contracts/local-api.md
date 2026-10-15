@@ -50,7 +50,7 @@
 | POST | `/ai/seeds/translate` | 中文种子/词表翻译：`{seed_ids|texts, targets:[lang]}` → job（FR-012/009） |
 | POST | `/ai/content/draft` | 中文母版辅助编写：`{theme_id, brief, tone, length?}` → job，产出 draft 版本（FR-038） |
 | POST | `/ai/content/translate` | 母版 → 目标语言版本：`{theme_id, master_variant_id, targets:[lang]}` → job（FR-038） |
-| GET | `/ai/calls?job_id=&operation=&limit=&offset=` | LLM 调用明细（逐次尝试的输入/输出/修复链/耗时/用量；新→旧）→ `{total, items[]}` |
+| GET | `/ai/calls?job_id=&operation=&limit=&offset=` | LLM 调用明细（逐次尝试的输入/输出/修复链/耗时/用量；新→旧）→ `{total, items[]}`；`ok` 三态（`null` = 进行中：请求已发出、尚未返回） |
 
 ### 种子知识库（US1）
 

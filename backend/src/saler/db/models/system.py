@@ -75,6 +75,8 @@ class LlmCall(Base):
 
     - `call_index`：同一任务内第几次模型调用（多语言循环逐语言一次）；
     - `attempt`：该次调用内的第几次尝试（>1 为修复重试）；
+    - `ok`：三态——`True` 成功 / `False` 失败 / `NULL` 进行中（请求已发出、尚未返回；
+      卡住时据此判断阻塞在哪一步），启动对账把遗留的 NULL 行收口（call_log.close_stale_calls）；
     - `phase`：任务层标注的调用上下文（如 `lang:en`），可空。
     """
 
@@ -89,7 +91,7 @@ class LlmCall(Base):
     provider: Mapped[str] = mapped_column(String(100), default="")
     model: Mapped[str] = mapped_column(String(100), default="")
     attempt: Mapped[int] = mapped_column(default=1)
-    ok: Mapped[bool] = mapped_column(default=False)
+    ok: Mapped[bool | None] = mapped_column()  # 三态：True 成功 / False 失败 / NULL 进行中
     error_kind: Mapped[str | None] = mapped_column(String(30))
     error_detail: Mapped[str | None] = mapped_column(Text)
     request_messages: Mapped[list] = mapped_column(default=list)

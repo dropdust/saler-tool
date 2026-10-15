@@ -1,4 +1,8 @@
-"""LLM 适配器契约（contracts/provider-adapters.md §1）。"""
+"""LLM 适配器契约（contracts/provider-adapters.md §1）。
+
+`on_attempt` 载荷带 `event`：`"start"`（请求即将发出，ok/latency/输出为空）与
+`"finish"`（本次尝试结束）；缺省视为 finish。任务层据此先落"进行中"行、再原位收口。
+"""
 
 from __future__ import annotations
 
@@ -28,6 +32,7 @@ class LLMProvider(Protocol):
         system: str | None = None,
         max_repair_attempts: int = 2,
         timeout_s: float = 120,
+        deadline_s: float = 300,
         on_attempt: Callable[[dict], None] | None = None,
     ) -> dict: ...
 
@@ -39,6 +44,7 @@ class LLMProvider(Protocol):
         target_lang: str,
         glossary: dict[str, str] | None = None,
         timeout_s: float = 120,
+        deadline_s: float = 300,
         on_attempt: Callable[[dict], None] | None = None,
     ) -> list[str]: ...
 

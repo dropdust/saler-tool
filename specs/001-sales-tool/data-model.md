@@ -451,7 +451,7 @@
 | operation | TEXT | `seed_expand` / `seed_translate` / `term_translate` / `content_draft` / `content_translate` |
 | provider / model | TEXT | 调用时的服务商与模型 |
 | attempt | INTEGER | 该次调用内的第几次尝试（>1 为 schema 修复重试） |
-| ok | BOOLEAN | 该次尝试是否通过校验/成功 |
+| ok | BOOLEAN NULL | 三态：`1` 成功 / `0` 失败 / `NULL` 进行中（请求已发出、尚未返回；行在请求发出时先落库、返回后原位收口）；启动对账把遗留 NULL 行收口为失败（`call_log.close_stale_calls`） |
 | error_kind / error_detail | TEXT NULL | 失败类别（ErrorKind.value）与细节 |
 | request_messages | JSON | 实际发送的消息（system + user + 修复链累积对话） |
 | response_text | TEXT NULL | 模型原始输出 |

@@ -409,7 +409,8 @@ export interface LlmCallRow {
   provider: string
   model: string
   attempt: number
-  ok: boolean
+  /** 三态：true 成功 / false 失败 / null 进行中（请求已发出、尚未返回） */
+  ok: boolean | null
   error_kind: string | null
   error_detail: string | null
   request_messages: LlmCallMessage[]

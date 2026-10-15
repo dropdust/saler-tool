@@ -82,6 +82,7 @@ import { watchJob } from '../../api/jobs'
 import LlmCallsDrawer from '../../components/common/LlmCallsDrawer.vue'
 import type { GraphNode, Paginated } from '../../api/types'
 import { NODE_TYPE_LABELS } from '../../constants'
+import { parseServerTime } from '../../stores/jobCenter'
 
 const visible = ref(false)
 const emit = defineEmits<{ done: [] }>()
@@ -114,6 +115,16 @@ function reset() {
   finishedJobId.value = null
 }
 
+/**
+ * 已等待秒数（自任务开始）：随 800ms 轮询刷新——前台卡住时也能看出等了多久，
+ * 配合「调用明细」判断是阻塞在单次请求还是多次重试。
+ */
+function waitedSeconds(startedAt: string | null): number {
+  const started = parseServerTime(startedAt)
+  if (started == null) return 0
+  return Math.max(0, Math.floor((Date.now() - started) / 1000))
+}
+
 /** 查看本次任务发给模型的入参与原始出参（失败时尤其有用） */
 function openCalls() {
   if (finishedJobId.value == null) return
@@ -132,9 +143,10 @@ async function submit() {
     const { job_id } = await api.post<{ job_id: number }>('/ai/seeds/expand', form.value)
     const job = await watchJob(job_id, (tick) => {
       const phase = (tick.progress?.phase as string) ?? ''
-      if (phase === 'calling_llm') progressText.value = '大模型正在生成候选…'
-      else if (phase) progressText.value = `处理中：${phase}`
-      else progressText.value = '处理中…'
+      const waited = `（已等待 ${waitedSeconds(tick.started_at)} 秒）`
+      if (phase === 'calling_llm') progressText.value = `大模型正在生成候选…${waited}`
+      else if (phase) progressText.value = `处理中：${phase}${waited}`
+      else progressText.value = `处理中…${waited}`
     })
     finishedJobId.value = job_id // 终态后亮出「查看调用明细」（成功/失败都可以看）
     if (job.status === 'completed') {

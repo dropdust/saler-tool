@@ -7,13 +7,16 @@ import { describe, expect, it } from 'vitest'
 
 import type { LlmCallRow } from '../src/api/types'
 import {
+  attemptTiming,
   formatLatency,
   formatTs,
   groupAttempts,
+  groupTiming,
   messageText,
   operationLabel,
   phaseText,
   roleLabel,
+  runningElapsedMs,
   usageText,
 } from '../src/components/common/llmCalls'
 
@@ -71,6 +74,37 @@ describe('groupAttempts · 修复链合卡', () => {
   it('耗时缺失的尝试不计入总耗时', () => {
     const [group] = groupAttempts([row({ id: 2, attempt: 2, latency_ms: null }), row({ id: 1 })])
     expect(group.totalLatencyMs).toBe(1000)
+  })
+})
+
+describe('进行中口径（ok=null：请求已发出、尚未返回）', () => {
+  const now = Date.parse('2026-10-15T02:00:24Z')
+
+  it('runningElapsedMs 自 ts（朴素 UTC）起算；缺 ts 返回 null；不倒扣为负', () => {
+    expect(runningElapsedMs({ ts: '2026-10-15T01:59:54.000000' }, now)).toBe(30_000)
+    expect(runningElapsedMs({ ts: null }, now)).toBeNull()
+    expect(runningElapsedMs({ ts: '2026-10-15T02:01:00.000000' }, now)).toBe(0)
+  })
+
+  it('attemptTiming：进行中 → 已等待；已结束 → 实际耗时', () => {
+    expect(
+      attemptTiming(row({ ok: null, latency_ms: null, ts: '2026-10-15T01:59:54.000000' }), now),
+    ).toBe('已等待 30.0s')
+    expect(attemptTiming(row({ ok: false, latency_ms: 420 }), now)).toBe('420ms')
+  })
+
+  it('groupTiming：末次尝试进行中 → 进行中口径；否则耗时合计', () => {
+    const [running] = groupAttempts([row({ ok: null, latency_ms: null, ts: '2026-10-15T01:59:54.000000' })])
+    expect(groupTiming(running, now)).toBe('进行中 · 已等待 30.0s')
+
+    const [done] = groupAttempts([row({ latency_ms: 84_000 })])
+    expect(groupTiming(done, now)).toBe('1m24s')
+  })
+
+  it('ok=null 的尝试保留三态：组 ok 为 null，且不计入耗时合计', () => {
+    const [group] = groupAttempts([row({ ok: null, latency_ms: null, response_text: null })])
+    expect(group.ok).toBeNull()
+    expect(group.totalLatencyMs).toBe(0)
   })
 })
 

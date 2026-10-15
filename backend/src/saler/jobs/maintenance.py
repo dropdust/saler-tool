@@ -37,6 +37,10 @@ def run_maintenance(
     calls_removed = call_log.prune_calls(db, keep_days=keep_days)
     if calls_removed:
         logger.info(f"维护：清理 LLM 调用明细 {calls_removed} 条")
+    # 启动对账：上次进程退出遗留的"进行中"行收口（此时不可能有真实进行中的调用）
+    stale_closed = call_log.close_stale_calls(db)
+    if stale_closed:
+        logger.info(f"维护：收口上次退出遗留的进行中调用 {stale_closed} 条")
     due = backup_due(db, days=remind_days)
     if due:
         log_op(
@@ -45,4 +49,9 @@ def run_maintenance(
             f"备份提醒：超过 {remind_days} 天未备份（或从未备份），建议在「设置 → 备份与数据」生成归档",
             level="warn",
         )
-    return {"logs_removed": removed, "llm_calls_removed": calls_removed, "backup_due": due}
+    return {
+        "logs_removed": removed,
+        "llm_calls_removed": calls_removed,
+        "llm_calls_closed": stale_closed,
+        "backup_due": due,
+    }

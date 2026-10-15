@@ -1,13 +1,17 @@
 """LLM 调用明细（llm_call）：适配器逐次尝试回调 / 记录器落库 / 任务层调用链。
 
 覆盖：
-- 适配器 on_attempt 契约（成功含输入/输出/usage/耗时；修复重试链；provider 错误）；
-- CallRecorder：call_index / phase / attempt 组装与落库；
+- 适配器 on_attempt 契约（start/finish 事件；成功含输入/输出/usage/耗时；修复重试链；provider 错误）；
+- CallRecorder：call_index / phase / attempt 组装与落库；进行中行（start 先落库、finish 原位更新）；
+- 超时中断：超时行照常收口，被放弃线程的迟到结果不得二次落库；
+- 启动对账：进程退出遗留的进行中行收口（close_stale_calls）；
 - 任务层：AI 扩充与内容起草把"发给模型的输入 + 模型原始输出"写进 llm_call（含失败路径）。
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -77,6 +81,25 @@ def _provider(script: list) -> OpenAICompatibleProvider:
 # ---------- 适配器：on_attempt 契约 ----------
 
 
+def _finishes(attempts: list[dict]) -> list[dict]:
+    """一次尝试发两条事件：start（请求已发出，尚无结果）与 finish（本次尝试结束）。"""
+    return [a for a in attempts if a.get("event") != "start"]
+
+
+def test_attempt_events_bracket_the_request():
+    provider = _provider([('{"items": ["ok"]}', None)])
+    attempts: list[dict] = []
+    provider.generate_structured(prompt="你好", schema=SCHEMA, on_attempt=attempts.append)
+    assert [a["event"] for a in attempts] == ["start", "finish"]
+    start, finish = attempts
+    # start：请求已发出、结果未知（ok/latency/输出一律为空）——卡住时据此判断"发到哪一步"
+    assert start["attempt"] == 1
+    assert start["ok"] is None and start["latency_ms"] is None
+    assert start["response_text"] is None and start["error_kind"] is None
+    assert start["messages"][1]["content"] == "你好"
+    assert finish["ok"] is True
+
+
 def test_attempt_payload_carries_request_response_usage_latency():
     provider = _provider(
         [('{"items": ["ok"]}', _Usage(prompt_tokens=3, completion_tokens=5, total_tokens=8))]
@@ -84,7 +107,7 @@ def test_attempt_payload_carries_request_response_usage_latency():
     attempts: list[dict] = []
     result = provider.generate_structured(prompt="你好", schema=SCHEMA, on_attempt=attempts.append)
     assert result == {"items": ["ok"]}
-    (a,) = attempts
+    (a,) = _finishes(attempts)
     assert a["attempt"] == 1
     assert a["ok"] is True and a["error_kind"] is None and a["error_detail"] is None
     assert a["provider"] == "stub" and a["model"] == "m"
@@ -100,8 +123,9 @@ def test_repair_chain_records_every_attempt_with_cumulative_messages():
     provider = _provider(["这不是 JSON", '{"items": ["ok"]}'])
     attempts: list[dict] = []
     provider.generate_structured(prompt="p", schema=SCHEMA, on_attempt=attempts.append)
-    assert [a["attempt"] for a in attempts] == [1, 2]
-    first, second = attempts
+    finishes = _finishes(attempts)
+    assert [a["attempt"] for a in finishes] == [1, 2]
+    first, second = finishes
     assert first["ok"] is False and first["error_kind"] == "invalid_output"
     assert first["response_text"] == "这不是 JSON"
     # 第二次请求 = 原始对话 + 上次原始输出 + 修复指令（完整修复链可见）
@@ -115,9 +139,10 @@ def test_schema_mismatch_attempt_records_validation_detail():
     provider = _provider(['{"items": 123}', '{"items": ["ok"]}'])
     attempts: list[dict] = []
     provider.generate_structured(prompt="p", schema=SCHEMA, on_attempt=attempts.append)
-    assert attempts[0]["ok"] is False and attempts[0]["error_kind"] == "invalid_output"
-    assert "schema 校验失败" in attempts[0]["error_detail"]
-    assert attempts[0]["response_text"] == '{"items": 123}'
+    first = _finishes(attempts)[0]
+    assert first["ok"] is False and first["error_kind"] == "invalid_output"
+    assert "schema 校验失败" in first["error_detail"]
+    assert first["response_text"] == '{"items": 123}'
 
 
 def test_provider_error_attempt_recorded_before_raise():
@@ -126,7 +151,7 @@ def test_provider_error_attempt_recorded_before_raise():
     with pytest.raises(ProviderError) as excinfo:
         provider.generate_structured(prompt="p", schema=SCHEMA, on_attempt=attempts.append)
     assert excinfo.value.kind == ErrorKind.NETWORK
-    (a,) = attempts
+    (a,) = _finishes(attempts)
     assert a["ok"] is False and a["error_kind"] == "network"
     assert a["response_text"] is None
     assert "boom" in (a["error_detail"] or "")
@@ -148,7 +173,8 @@ def test_translate_forwards_on_attempt():
         items=["甲", "乙"], source_lang="zh", target_lang="en", on_attempt=attempts.append
     )
     assert out == ["A", "B"]
-    assert len(attempts) == 1 and attempts[0]["ok"] is True
+    finishes = _finishes(attempts)
+    assert len(finishes) == 1 and finishes[0]["ok"] is True
 
 
 # ---------- 记录器：call_index / phase / 落库 ----------
@@ -189,6 +215,98 @@ def test_recorder_groups_attempts_into_calls_and_carries_phase(session_factory):
     assert rows[0].latency_ms == 12 and rows[0].usage == {"total_tokens": 3}
     assert rows[0].ts is not None
     assert rows[2].ok is False and rows[2].error_kind == "invalid_output"
+
+
+def test_recorder_creates_running_row_and_finishes_it_in_place(session_factory):
+    """start 先落一行"进行中"（ok=NULL）：请求已发出即可见；finish 原位收口，不新增行。"""
+    recorder = call_log.make_call_recorder(session_factory, job_id=8, operation="seed_expand")
+    recorder(_payload(event="start", ok=None, latency_ms=None, response_text=None))
+    with session_factory() as db:
+        (running,) = db.query(LlmCall).all()
+    assert running.ok is None and running.latency_ms is None and running.response_text is None
+    assert running.request_messages == [{"role": "user", "content": "hi"}]  # 卡住时也能看到入参
+    running_id = running.id
+
+    recorder(_payload())  # finish（同一次尝试）
+    with session_factory() as db:
+        rows = db.query(LlmCall).all()
+    assert len(rows) == 1 and rows[0].id == running_id
+    assert rows[0].ok is True and rows[0].latency_ms == 12
+    assert rows[0].response_text == '{"ok": true}'
+
+
+def test_recorder_start_events_advance_call_index_per_attempt_one(session_factory):
+    recorder = call_log.make_call_recorder(session_factory, job_id=None, operation="seed_translate")
+    recorder.phase = "lang:en"
+    recorder(_payload(event="start", ok=None, latency_ms=None, response_text=None))
+    recorder(_payload())  # 第 1 次调用完成
+    recorder.phase = "lang:ru"
+    recorder(_payload(event="start", ok=None, latency_ms=None, response_text=None))
+    recorder(_payload(ok=False, error_kind="timeout", latency_ms=120_000))
+    with session_factory() as db:
+        rows = db.query(LlmCall).order_by(LlmCall.id).all()
+    assert [(r.call_index, r.phase, r.ok) for r in rows] == [
+        (1, "lang:en", True),
+        (2, "lang:ru", False),
+    ]
+
+
+def test_close_stale_calls_closes_abandoned_running_rows(session_factory):
+    """启动对账：进程退出遗留的"进行中"行收口为失败并留痕；已结束的行不动。"""
+    with session_factory() as db:
+        db.add(LlmCall(job_id=1, operation="seed_expand", ok=None))
+        db.add(LlmCall(job_id=2, operation="seed_expand", ok=True, latency_ms=5))
+        db.commit()
+    with session_factory() as db:
+        closed = call_log.close_stale_calls(db)
+    assert closed == 1
+    with session_factory() as db:
+        rows = db.query(LlmCall).order_by(LlmCall.id).all()
+    assert rows[0].ok is False and "中断" in (rows[0].error_detail or "")
+    assert rows[1].ok is True and rows[1].error_detail is None
+
+
+class _HangingClient:
+    """create 挂起不返回；close 后立刻返回（模拟被放弃线程随后迟到返回）。"""
+
+    def __init__(self, block_s: float) -> None:
+        self.block_s = block_s
+        self._release = threading.Event()
+        outer = self
+
+        class _Completions:
+            def create(self, **kwargs):
+                outer._release.wait(outer.block_s)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"items": ["late"]}'))],
+                    usage=None,
+                )
+
+        self.chat = SimpleNamespace(completions=_Completions())
+
+    def close(self) -> None:
+        self._release.set()
+
+
+def test_timeout_finishes_running_row_and_discards_late_result(session_factory):
+    """挂起超限：本次尝试以 timeout 收口（不残留"进行中"），迟到返回不得二次落库。"""
+    client = _HangingClient(block_s=0.5)
+    provider = OpenAICompatibleProvider(
+        base_url="http://stub", api_key="k", model="m",
+        provider_name="stub", client_factory=lambda _t: client,
+    )
+    recorder = call_log.make_call_recorder(session_factory, job_id=8, operation="seed_expand")
+    with pytest.raises(ProviderError) as excinfo:
+        provider.generate_structured(prompt="p", schema=SCHEMA, deadline_s=0.1, on_attempt=recorder)
+    assert excinfo.value.kind == ErrorKind.TIMEOUT
+    with session_factory() as db:
+        (row,) = db.query(LlmCall).all()
+    assert row.ok is False and row.error_kind == "timeout" and row.job_id == 8
+
+    time.sleep(0.6)  # 等待被放弃的线程返回（迟到结果只能被丢弃）
+    with session_factory() as db:
+        rows = db.query(LlmCall).all()
+    assert len(rows) == 1 and rows[0].ok is False and rows[0].error_kind == "timeout"
 
 
 def test_prune_calls_removes_old_and_excess_rows(session_factory):

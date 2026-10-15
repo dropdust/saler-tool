@@ -140,6 +140,64 @@ describe('LlmCallsDrawer · 数据加载', () => {
   })
 })
 
+describe('LlmCallsDrawer · 进行中（T271）', () => {
+  /** 进行中行：请求已发出、尚未返回（ok=null，latency_ms 为空） */
+  const runningRow = (overrides: Partial<LlmCallRow> = {}) =>
+    row({ ok: null, latency_ms: null, response_text: null, ...overrides })
+
+  it('显示「进行中/已等待」，出参位标注尚未返回，不显示错误块', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-15T02:00:24Z'))
+    try {
+      const { open } = await mountAndOpen(ok([runningRow({ ts: '2026-10-15T01:59:54.000000' })]))
+      open()
+      await flushPromises()
+
+      const text = drawerEl().textContent ?? ''
+      expect(text).toContain('进行中')
+      expect(text).toContain('已等待 30.0s')
+      expect(text).toContain('（模型尚未返回）')
+      expect(document.body.querySelector('[data-test="llm-error"]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('存在进行中尝试时自动刷新；全部收口后停止轮询', async () => {
+    get.mockImplementation((path: string) => {
+      if (path !== '/ai/calls') return Promise.reject(new Error(`unexpected path ${path}`))
+      if (get.mock.calls.length <= 1) return Promise.resolve(page([runningRow()]))
+      return Promise.resolve(page([row({ ok: true, latency_ms: 900 })]))
+    })
+    const wrapper = mount(LlmCallsDrawer, {
+      global: { plugins: [ElementPlus, i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    // 打开前切换假定时器：轮询由 open 触发的加载自行调度
+    vi.useFakeTimers()
+    try {
+      ;(wrapper.vm as unknown as { open: (o: { jobId: number }) => void }).open({ jobId: 9 })
+      await flushPromises()
+      expect(drawerEl().textContent).toContain('进行中')
+
+      const before = get.mock.calls.length
+      await vi.advanceTimersByTimeAsync(2100)
+      await flushPromises()
+      expect(get.mock.calls.length).toBeGreaterThan(before) // 进行中 → 自动刷新
+      expect(drawerEl().textContent).toContain('成功')
+
+      const settled = get.mock.calls.length
+      await vi.advanceTimersByTimeAsync(8000) // 已收口：不再刷新
+      expect(get.mock.calls.length).toBe(settled)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+})
+
 describe('LlmCallsDrawer · 内容呈现', () => {
   it('渲染入参（system/user 全文）与出参原文', async () => {
     const { open } = await mountAndOpen(

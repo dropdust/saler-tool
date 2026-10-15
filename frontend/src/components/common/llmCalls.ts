@@ -21,8 +21,8 @@ export interface LlmCallGroup {
   model: string
   /** 各次尝试（升序） */
   attempts: LlmCallRow[]
-  /** 末次尝试是否成功（修复链以最后一次为准） */
-  ok: boolean
+  /** 末次尝试状态（修复链以最后一次为准）：null = 进行中 */
+  ok: boolean | null
   /** 末次尝试的错误类别（成功为 null） */
   errorKind: string | null
   /** 各次尝试耗时求和（null 不计入） */
@@ -64,6 +64,30 @@ export function groupAttempts(rows: LlmCallRow[]): LlmCallGroup[] {
     group.ts = group.attempts[0].ts
   }
   return [...groups.values()]
+}
+
+/**
+ * 进行中尝试（ok=null，请求已发出、尚未返回）的已等待毫秒：自 ts（朴素 UTC）起算。
+ * 无可用起点返回 null；服务端时间略超前时按 0 计。
+ */
+export function runningElapsedMs(row: Pick<LlmCallRow, 'ts'>, now: number = Date.now()): number | null {
+  const startedAt = parseServerTime(row.ts)
+  if (startedAt == null) return null
+  return Math.max(0, now - startedAt)
+}
+
+/** 单次尝试的耗时口径：进行中 → 已等待；已结束 → 实际耗时。 */
+export function attemptTiming(row: LlmCallRow, now: number = Date.now()): string {
+  if (row.ok !== null) return formatLatency(row.latency_ms)
+  const elapsed = runningElapsedMs(row, now)
+  return elapsed == null ? '进行中' : `已等待 ${formatLatency(elapsed)}`
+}
+
+/** 组头耗时口径：末次尝试进行中 → 「进行中 · 已等待 …」；否则各次耗时求和。 */
+export function groupTiming(group: LlmCallGroup, now: number = Date.now()): string {
+  const last = group.attempts[group.attempts.length - 1]
+  if (last && last.ok === null) return `进行中 · ${attemptTiming(last, now)}`
+  return formatLatency(group.totalLatencyMs)
 }
 
 export function formatLatency(ms: number | null | undefined): string {

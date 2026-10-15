@@ -20,7 +20,7 @@
 | `parse` | 页面结构变化/解析失败（网页端检索特有；004） | 立即切换下一渠道（不可重试） |
 | `invalid_output` | 输出不符合 schema（LLM 特有） | 携带校验错误重试（有限次） |
 | `recipient_rejected` | 收件人被拒（发送特有） | 记入台账标记失败，不重试 |
-| `server` | 对端 5xx | 退避重试 |
+| `server` | 对端 5xx / 响应体异常（如缺 `choices` 的空壳响应） | 退避重试 |
 
 - 凭证注入：适配器实例由"通道/提供方配置"构造，密钥经加密存储解密后仅在内存中短暂存在；日志与异常信息必须脱敏（FR-006）。
 
@@ -35,17 +35,28 @@ class LLMProvider(Protocol):
                             system: str | None = None,
                             max_repair_attempts: int = 2,
                             timeout_s: float = 120,
+                            deadline_s: float = 300,
                             on_attempt: Callable[[dict], None] | None = None) -> dict: ...
         # 返回通过 schema 校验的 JSON 对象（dict）。
         # 内部流程：请求 → 解析 JSON → jsonschema 校验 → 失败则把校验错误回传模型修复 → 仍失败抛 invalid_output。
-        # on_attempt 逐次尝试回调（llm_call 明细）：{provider, model, attempt, messages, response_text,
+        # timeout_s：单次 HTTP 请求的 I/O 超时（连接单独收紧）；
+        # deadline_s：本次调用的墙钟硬上限（含解析与修复重试全程）——超时即弃等 + 主动断连，抛 timeout；
+        #             同步阻塞调用无法从外部取消，故实现为"放弃等待 + 断连"，被放弃线程的迟到结果一律丢弃。
+        # 不做隐藏重试（max_retries=0）：一次尝试 = 一次请求，重试编排归任务层。
+        # on_attempt 逐次尝试回调（llm_call 明细）：{event, provider, model, attempt, messages, response_text,
         # ok, error_kind, error_detail, latency_ms, usage}；回调自身异常不得影响模型调用。
+        #   event="start"：请求即将发出（ok/latency/输出为空）——任务层先落"进行中"行，
+        #                  卡住时据此判断阻塞在第一次请求还是修复重试；
+        #   event="finish"：本次尝试结束（成功或失败）；缺省视为 finish（兼容只发结果的实现）。
+        # 响应体结构异常（如缺 choices 的空壳响应）抛 server，绝不外泄解析类 TypeError。
 
     def translate(self, *, items: list[str], source_lang: str, target_lang: str,
                   glossary: dict[str, str] | None = None,
                   timeout_s: float = 120,
+                  deadline_s: float = 300,
                   on_attempt: Callable[[dict], None] | None = None) -> list[str]: ...
         # 等长返回；glossary 传入词表术语（产品名/行业术语）以保持多语言一致性（FR-038）。
+        # deadline_s 按"一次翻译调用"计（多语言循环逐语言各一次调用）。
         # on_attempt 透传给 generate_structured。
 
     def complete(self, *, prompt: str, system: str | None = None,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -90,6 +92,78 @@ def test_translate_count_mismatch_raises():
     with pytest.raises(ProviderError) as excinfo:
         provider.translate(items=["甲", "乙"], source_lang="zh", target_lang="en")
     assert excinfo.value.kind == ErrorKind.INVALID_OUTPUT
+
+
+# ---------- 响应健壮性与调用总时限（T271） ----------
+
+
+class _EmptyChoicesClient:
+    """响应体缺 choices（网关截断/超时返回空壳）——旧实现会在此抛 TypeError 并被误标 network。"""
+
+    def __init__(self, choices=None) -> None:
+        self.chat = SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kw: SimpleNamespace(choices=choices, usage=None)
+            )
+        )
+
+
+class _HangingClient:
+    """create 挂起不返回（模拟服务端/中间层卡死）；close 记录是否被主动断连。"""
+
+    def __init__(self, block_s: float) -> None:
+        self.block_s = block_s
+        self.closed = False
+        self.entered = threading.Event()
+        outer = self
+
+        class _Completions:
+            def create(self, **kwargs):
+                outer.entered.set()
+                time.sleep(outer.block_s)
+                return _response('{"items": ["late"]}')
+
+        self.chat = SimpleNamespace(completions=_Completions())
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _client_provider(client) -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        base_url="http://stub", api_key="k", model="m",
+        provider_name="stub", client_factory=lambda _t: client,
+    )
+
+
+@pytest.mark.parametrize("choices", [None, []])
+def test_response_without_choices_is_server_error_not_typeerror(choices):
+    provider = _client_provider(_EmptyChoicesClient(choices))
+    with pytest.raises(ProviderError) as excinfo:
+        provider.generate_structured(prompt="p", schema=SCHEMA)
+    assert excinfo.value.kind == ErrorKind.SERVER
+    assert "choices" in str(excinfo.value)
+
+
+def test_hung_request_aborts_at_deadline_and_closes_connection():
+    client = _HangingClient(block_s=5)
+    provider = _client_provider(client)
+    started = time.monotonic()
+    with pytest.raises(ProviderError) as excinfo:
+        provider.generate_structured(prompt="p", schema=SCHEMA, deadline_s=0.2)
+    elapsed = time.monotonic() - started
+    assert excinfo.value.kind == ErrorKind.TIMEOUT
+    assert elapsed < 2  # 不跟随服务端挂起（block=5s）
+    assert client.entered.is_set()  # 请求已发出才谈得上中断
+    assert client.closed is True  # 主动断连，尽快释放被放弃的线程
+
+
+def test_exhausted_deadline_sends_no_request():
+    provider, client = _provider(['{"items": ["x"]}'])
+    with pytest.raises(ProviderError) as excinfo:
+        provider.generate_structured(prompt="p", schema=SCHEMA, deadline_s=0)
+    assert excinfo.value.kind == ErrorKind.TIMEOUT
+    assert client.calls == []
 
 
 def test_json_schema_capability_flag_selects_response_format():

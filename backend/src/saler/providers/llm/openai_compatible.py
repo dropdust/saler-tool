@@ -3,13 +3,17 @@
 工程约定（research.md §6）：
 - 输出永不信任服务商：一律应用侧 jsonschema 校验 + 有限修复重试（≤3 次尝试）；
 - 按能力标记选择请求策略：``supports_json_schema`` 为真用 json_schema，否则 json_object + 强提示；
-- 连接测试优先 ``GET /models``，失败回退 1-token ping，原样呈现服务商错误文本。
+- 连接测试优先 ``GET /models``，失败回退 1-token ping，原样呈现服务商错误文本；
+- 调用有硬时限（T271）：单次模型调用（含解析/修复重试全程）超 `DEFAULT_CALL_DEADLINE_S` 即中断，
+  不跟随服务端/中间层挂起（同步阻塞调用无法从外部取消 → 放弃等待 + 主动断连）；
+- 不做隐藏重试（``max_retries=0``）：一次尝试 = 一次请求，重试编排归任务层（contracts/provider-adapters.md）。
 """
 
 from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -21,6 +25,11 @@ from saler.providers.errors import ErrorKind, ProviderError
 from saler.providers.llm.base import TestResult
 from saler.providers.llm.schemas import TRANSLATION_LIST_SCHEMA
 from saler.providers.registry import ProviderManifest, registry
+
+#: 单次模型调用（generate_structured / translate 的一次调用）的墙钟上限（秒）
+DEFAULT_CALL_DEADLINE_S = 300.0
+#: 连接超时与读超时分开：连不上要快速失败，读大响应可放宽
+CONNECT_TIMEOUT_S = 10.0
 
 # 首批预置（模型 ID 以 GET /models 实测为准，不硬编码；model 留空由用户填写）
 PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
@@ -102,6 +111,50 @@ def _elapsed_ms(started: float) -> int:
     return int((time.perf_counter() - started) * 1000)
 
 
+def _close_quietly(client: Any) -> None:
+    """尽力关闭客户端（断连、释放连接池）；替身/桩客户端没有 close 时静默跳过。"""
+    close = getattr(client, "close", None)
+    if close is None:
+        return
+    try:
+        close()
+    except Exception:  # noqa: BLE001 - 关闭失败不影响调用结论
+        logger.debug("关闭 LLM 客户端失败（忽略）")
+
+
+def run_with_deadline(fn: Callable[[], Any], *, seconds: float, on_timeout: Callable[[], None] | None = None) -> Any:
+    """在守护线程执行 ``fn``，超过 ``seconds`` 秒未返回即放弃：先尽力 ``on_timeout()``（如断连），再抛 TimeoutError。
+
+    - 同步阻塞的 HTTP 调用无法从外部取消，故以"放弃等待 + 主动断连"实现墙钟硬上限；
+    - 被放弃线程的返回值/异常一律丢弃：迟到结果不得二次上报（llm_call 明细不出现幽灵行）。
+    """
+    if seconds <= 0:
+        raise TimeoutError("调用时限已耗尽")
+    box: dict[str, Any] = {}
+    finished = threading.Event()
+
+    def _run() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - 原样转交调用线程
+            box["error"] = exc
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=_run, name="llm-call", daemon=True)
+    worker.start()
+    if not finished.wait(seconds):
+        if on_timeout is not None:
+            try:
+                on_timeout()
+            except Exception:  # noqa: BLE001 - 断连失败不改变"已超时"结论
+                logger.debug("超时后断连失败（忽略）")
+        raise TimeoutError(f"模型响应超过 {seconds:.0f}s 未返回")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 def _usage_to_dict(usage: Any) -> dict | None:
     """openai SDK usage（pydantic 模型）→ dict（供明细落库）；未知形态返回 None。"""
     if usage is None:
@@ -141,9 +194,33 @@ class OpenAICompatibleProvider:
 
     # ---- 传输 ----
     def _default_client_factory(self, timeout_s: float) -> Any:
+        import httpx
         from openai import OpenAI
 
-        return OpenAI(base_url=self.base_url, api_key=self._api_key, timeout=timeout_s)
+        return OpenAI(
+            base_url=self.base_url,
+            api_key=self._api_key,
+            # 单次请求的 I/O 超时（连接单独收紧）；调用全程的墙钟上限在 _chat 的 run_with_deadline
+            timeout=httpx.Timeout(timeout_s, connect=min(CONNECT_TIMEOUT_S, timeout_s)),
+            max_retries=0,
+        )
+
+    def _extract_content(self, resp: Any) -> str:
+        """取首条回复内容；响应体缺 choices / 结构异常一律显式报 server，绝不外泄 TypeError。"""
+        choices = getattr(resp, "choices", None)
+        if not choices:
+            raise ProviderError(
+                ErrorKind.SERVER,
+                "服务商响应缺少 choices（网关截断或超时返回空壳）",
+                provider=self.provider_name,
+                detail=repr(resp)[:500],
+            )
+        content = getattr(getattr(choices[0], "message", None), "content", None)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, (list, dict)):  # 多段 content（多模态）→ 原样 JSON 化，交由解析卫生处理
+            return json.dumps(content, ensure_ascii=False)
+        return ""
 
     def _chat(
         self,
@@ -151,39 +228,62 @@ class OpenAICompatibleProvider:
         messages: list[dict[str, str]],
         response_format: dict | None = None,
         timeout_s: float = 120,
+        deadline_s: float | None = None,
     ) -> str:
+        kwargs: dict[str, Any] = {"model": self.model, "messages": messages}
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        budget = timeout_s if deadline_s is None else deadline_s
+        client = self._client_factory(timeout_s)
         try:
-            client = self._client_factory(timeout_s)
-            kwargs: dict[str, Any] = {"model": self.model, "messages": messages}
-            if self.temperature is not None:
-                kwargs["temperature"] = self.temperature
-            if response_format is not None:
-                kwargs["response_format"] = response_format
-            resp = client.chat.completions.create(**kwargs)
-            self._last_usage = _usage_to_dict(getattr(resp, "usage", None))
-            return resp.choices[0].message.content or ""
-        except ProviderError:
-            raise
-        except Exception as exc:
-            raise map_openai_error(exc, provider=self.provider_name) from exc
+            try:
+                resp = run_with_deadline(
+                    lambda: client.chat.completions.create(**kwargs),
+                    seconds=budget,
+                    on_timeout=lambda: _close_quietly(client),
+                )
+            except TimeoutError as exc:
+                raise ProviderError(
+                    ErrorKind.TIMEOUT,
+                    f"模型调用超过 {budget:.0f}s 未返回（已中断连接）",
+                    provider=self.provider_name,
+                    detail=str(exc),
+                ) from exc
+            except ProviderError:
+                raise
+            except Exception as exc:
+                raise map_openai_error(exc, provider=self.provider_name) from exc
+        finally:
+            _close_quietly(client)
+        # 仅在真正拿到响应后才记录用量（超时被放弃的线程不得迟到改写）
+        self._last_usage = _usage_to_dict(getattr(resp, "usage", None))
+        return self._extract_content(resp)
 
     def _emit_attempt(
         self,
         on_attempt: Callable[[dict], None] | None,
         *,
+        event: str,
         attempt: int,
         messages: list[dict[str, str]],
         response_text: str | None,
-        ok: bool,
+        ok: bool | None,
         error_kind: str | None,
         error_detail: str | None,
-        latency_ms: int,
+        latency_ms: int | None,
         usage: dict | None,
     ) -> None:
-        """把一次尝试的完整输入/输出交给记录方（llm_call 明细）；观测失败不影响调用。"""
+        """把一次尝试的输入/输出交给记录方（llm_call 明细）；观测失败不影响调用。
+
+        - ``event="start"``：请求即将发出（ok/latency/输出一律为空；卡住时据此判断已发到哪一步）；
+        - ``event="finish"``：本次尝试结束（成功或失败）。
+        """
         if on_attempt is None:
             return
         payload = {
+            "event": event,
             "provider": self.provider_name,
             "model": self.model,
             "attempt": attempt,
@@ -204,7 +304,14 @@ class OpenAICompatibleProvider:
     def test_connection(self) -> TestResult:
         try:
             client = self._client_factory(15)
-            models = client.models.list()
+            try:  # 同 _chat：探测也有硬时限，挂起的服务端不会把"测试连接"吊住
+                models = run_with_deadline(
+                    lambda: client.models.list(),
+                    seconds=15,
+                    on_timeout=lambda: _close_quietly(client),
+                )
+            finally:
+                _close_quietly(client)
             names = [m.id for m in getattr(models, "data", [])][:50]
             return TestResult(ok=True, detail="连接成功（已获取模型列表）", models=names)
         except Exception as first:
@@ -235,6 +342,7 @@ class OpenAICompatibleProvider:
         system: str | None = None,
         max_repair_attempts: int = 2,
         timeout_s: float = 120,
+        deadline_s: float = DEFAULT_CALL_DEADLINE_S,
         on_attempt: Callable[[dict], None] | None = None,
     ) -> dict:
         sys_text = system or (
@@ -246,22 +354,46 @@ class OpenAICompatibleProvider:
             {"role": "user", "content": prompt},
         ]
         last_error: str = ""
+        deadline = time.monotonic() + deadline_s
         self.last_stats = {"attempts": 0, "repair_attempts": 0, "ok": False, "error_kind": None}
         for _attempt in range(max_repair_attempts + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:  # 全程时限已到：不再发请求（修复重试同样受限于此）
+                self.last_stats["error_kind"] = ErrorKind.TIMEOUT.value
+                raise ProviderError(
+                    ErrorKind.TIMEOUT,
+                    f"模型调用总时长超过 {deadline_s:.0f}s（含解析与修复重试全程）",
+                    provider=self.provider_name,
+                    detail=last_error[:500],
+                )
             attempt_no = _attempt + 1
             self.last_stats["attempts"] = attempt_no
             self.last_stats["repair_attempts"] = _attempt
             self._last_usage = None
+            self._emit_attempt(
+                on_attempt,
+                event="start",
+                attempt=attempt_no,
+                messages=messages,
+                response_text=None,
+                ok=None,
+                error_kind=None,
+                error_detail=None,
+                latency_ms=None,
+                usage=None,
+            )
             started = time.perf_counter()
             try:
                 text = self._chat(
                     messages=messages,
                     response_format=self._response_format(schema),
                     timeout_s=timeout_s,
+                    deadline_s=max(deadline - time.monotonic(), 0.0),
                 )
             except ProviderError as exc:
                 self._emit_attempt(
                     on_attempt,
+                    event="finish",
                     attempt=attempt_no,
                     messages=messages,
                     response_text=None,
@@ -280,6 +412,7 @@ class OpenAICompatibleProvider:
                 last_error = f"非 JSON：{exc}"
                 self._emit_attempt(
                     on_attempt,
+                    event="finish",
                     attempt=attempt_no,
                     messages=messages,
                     response_text=text,
@@ -300,6 +433,7 @@ class OpenAICompatibleProvider:
                 last_error = f"schema 校验失败：{exc.message}（路径：{list(exc.absolute_path)}）"
                 self._emit_attempt(
                     on_attempt,
+                    event="finish",
                     attempt=attempt_no,
                     messages=messages,
                     response_text=text,
@@ -320,6 +454,7 @@ class OpenAICompatibleProvider:
                 continue
             self._emit_attempt(
                 on_attempt,
+                event="finish",
                 attempt=attempt_no,
                 messages=messages,
                 response_text=text,
@@ -347,6 +482,7 @@ class OpenAICompatibleProvider:
         target_lang: str,
         glossary: dict[str, str] | None = None,
         timeout_s: float = 120,
+        deadline_s: float = DEFAULT_CALL_DEADLINE_S,
         on_attempt: Callable[[dict], None] | None = None,
     ) -> list[str]:
         if not items:
@@ -362,7 +498,11 @@ class OpenAICompatibleProvider:
             f"不得合并、增删或解释。{glossary_txt}\n\n输入：\n{numbered}"
         )
         data = self.generate_structured(
-            prompt=prompt, schema=TRANSLATION_LIST_SCHEMA, timeout_s=timeout_s, on_attempt=on_attempt
+            prompt=prompt,
+            schema=TRANSLATION_LIST_SCHEMA,
+            timeout_s=timeout_s,
+            deadline_s=deadline_s,
+            on_attempt=on_attempt,
         )
         out = list(data.get("items", []))
         if len(out) != len(items):

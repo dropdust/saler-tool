@@ -118,3 +118,36 @@ describe('AiExpandDialog · 查看调用明细入口（T269）', () => {
     expect(document.body.querySelector('[data-test="expand-view-calls"]')).not.toBeNull()
   })
 })
+
+describe('AiExpandDialog · 调用中「已等待」（T271）', () => {
+  it('轮询到 running 时进度文案带已等待时长——前台卡住也知道等了多久', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-15T02:00:24Z'))
+    let resolveJob!: (job: JobPayload) => void
+    waitJob.mockImplementation((_jobId, onTick) => {
+      onTick?.(
+        jobPayload({
+          status: 'running',
+          progress: { phase: 'calling_llm' },
+          started_at: '2026-10-15T01:59:54.000000',
+        }),
+      )
+      return new Promise<JobPayload>((resolve) => {
+        resolveJob = resolve
+      })
+    })
+    try {
+      await openDialog()
+      await clickSubmit()
+      const text = document.body.textContent ?? ''
+      expect(text).toContain('大模型正在生成候选')
+      expect(text).toContain('已等待 30 秒')
+
+      resolveJob(jobPayload()) // 收尾：任务完成
+      await flushPromises()
+      expect(document.body.textContent).toContain('已完成')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
