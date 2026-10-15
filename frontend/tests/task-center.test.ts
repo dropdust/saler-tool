@@ -9,10 +9,19 @@ import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
+vi.mock('../src/api/client', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+  ApiError: class ApiError extends Error {},
+  sseUrl: (path: string) => path,
+}))
+
+import { api } from '../src/api/client'
 import TaskCenter from '../src/components/common/TaskCenter.vue'
 import { i18n } from '../src/i18n'
 import { useJobCenterStore } from '../src/stores/jobCenter'
-import { jobRoute } from '../src/constants'
+import { isAiJobType, jobRoute } from '../src/constants'
+
+const get = vi.mocked(api.get)
 
 function jobRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -163,6 +172,64 @@ describe('TaskCenter · 任务抽屉', () => {
   })
 })
 
+describe('TaskCenter · AI 调用明细入口（T268）', () => {
+  beforeEach(() => {
+    get.mockReset()
+    get.mockResolvedValue({ total: 0, items: [] })
+  })
+
+  it('AI 任务卡有「调用明细」，非 AI 任务没有', async () => {
+    const { wrapper, store } = await mountCenter()
+    store.activeJobs = {
+      5: jobRow({ id: 5, job_type: 'ai_seed_expand', name: 'AI 扩充种子' }) as never,
+      6: jobRow({ id: 6, job_type: 'crawl' }) as never,
+    }
+    await wrapper.find('[data-test="task-center-trigger"]').trigger('click')
+    await flushPromises()
+
+    const cards = [...drawerEl().querySelectorAll<HTMLElement>('[data-test="active-job"]')]
+    const expandCard = cards.find((card) => card.textContent?.includes('AI 扩充种子'))
+    const crawlCard = cards.find((card) => card.textContent?.includes('客户线索挖掘'))
+    expect(expandCard?.querySelector('[data-test="job-calls"]')?.textContent?.trim()).toBe('调用明细')
+    expect(crawlCard?.querySelector('[data-test="job-calls"]')).toBeNull()
+  })
+
+  it('最近完成组的 AI 任务同样有入口', async () => {
+    const { wrapper, store } = await mountCenter()
+    store.recentJobs = [
+      jobRow({ id: 9, job_type: 'ai_content_draft', name: 'AI 起草母版', status: 'completed' }) as never,
+    ]
+    await wrapper.find('[data-test="task-center-trigger"]').trigger('click')
+    await flushPromises()
+
+    const card = drawerEl().querySelector<HTMLElement>('[data-test="recent-job"]')
+    expect(card?.querySelector('[data-test="job-calls"]')).not.toBeNull()
+  })
+
+  it('点击后按任务打开调用明细抽屉：挂在 body 顶层、任务抽屉保持打开', async () => {
+    const { wrapper, store } = await mountCenter()
+    store.recentJobs = [
+      jobRow({ id: 9, job_type: 'ai_seed_expand', name: 'AI 扩充种子', status: 'completed' }) as never,
+    ]
+    await wrapper.find('[data-test="task-center-trigger"]').trigger('click')
+    await flushPromises()
+
+    drawerEl().querySelector<HTMLElement>('[data-test="job-calls"]')!.click()
+    await flushPromises()
+
+    expect(get).toHaveBeenCalledWith('/ai/calls', { job_id: 9, limit: 20, offset: 0 })
+    const llmDrawer = document.body.querySelector<HTMLElement>('.llm-calls-drawer')
+    expect(llmDrawer).not.toBeNull()
+    expect(llmDrawer!.textContent).toContain('AI 调用明细')
+    // append-to-body：明细抽屉挂在 body 顶层，不属于任务抽屉的子树
+    // （否则会被任务抽屉的层叠上下文压住——叠加场景的实际约束）
+    expect(document.body.contains(llmDrawer)).toBe(true)
+    expect(drawerEl().contains(llmDrawer)).toBe(false)
+    // 任务抽屉未被关闭（新入口不做导航）
+    expect(drawerEl().textContent).toContain('AI 扩充种子')
+  })
+})
+
 describe('JOB_TYPE_ROUTES 路由映射', () => {
   it.each([
     ['crawl', '/leads/jobs'],
@@ -178,5 +245,18 @@ describe('JOB_TYPE_ROUTES 路由映射', () => {
 
   it('未映射类型回退 null（组件保持抽屉定位）', () => {
     expect(jobRoute('mystery')).toBeNull()
+  })
+
+  it('isAiJobType：仅 5 个 AI 任务类型为真（其余任务无 llm_call 明细）', () => {
+    const aiTypes = [
+      'ai_seed_expand',
+      'ai_seed_translate',
+      'ai_term_translate',
+      'ai_content_draft',
+      'ai_content_translate',
+    ]
+    expect(aiTypes.every((type) => isAiJobType(type))).toBe(true)
+    expect(isAiJobType('crawl')).toBe(false)
+    expect(isAiJobType('backup')).toBe(false)
   })
 })

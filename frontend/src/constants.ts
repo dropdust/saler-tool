@@ -91,3 +91,19 @@ export const JOB_TYPE_ROUTES: Record<string, string> = {
 export function jobRoute(jobType: string): string | null {
   return JOB_TYPE_ROUTES[jobType] ?? null
 }
+
+/**
+ * AI 任务类型（会写 llm_call 明细的 job_type，core/{seeds,content}/*.py 的 operation 一一对应）：
+ * 任务卡据此亮出「调用明细」入口；其余任务没有模型调用可看。
+ */
+export const AI_JOB_TYPES = [
+  'ai_seed_expand',
+  'ai_seed_translate',
+  'ai_term_translate',
+  'ai_content_draft',
+  'ai_content_translate',
+]
+
+export function isAiJobType(jobType: string): boolean {
+  return AI_JOB_TYPES.includes(jobType)
+}

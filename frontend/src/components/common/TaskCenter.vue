@@ -50,6 +50,16 @@
               恢复
             </el-button>
             <el-button size="small" type="danger" @click="control(job, 'cancel')">取消</el-button>
+            <el-button
+              v-if="isAiJobType(job.job_type)"
+              size="small"
+              text
+              type="primary"
+              data-test="job-calls"
+              @click="openCalls(job)"
+            >
+              调用明细
+            </el-button>
             <el-button size="small" text type="primary" @click="go(job)">查看</el-button>
           </div>
         </el-card>
@@ -69,11 +79,24 @@
           <div class="row meta">
             <span class="summary">{{ store.resultSummary(job) }}</span>
             <span class="spacer" />
+            <el-button
+              v-if="isAiJobType(job.job_type)"
+              size="small"
+              text
+              type="primary"
+              data-test="job-calls"
+              @click="openCalls(job)"
+            >
+              调用明细
+            </el-button>
             <el-button size="small" text type="primary" @click="go(job)">查看</el-button>
           </div>
         </el-card>
       </template>
     </el-drawer>
+
+    <!-- AI 任务：查看逐次模型调用的入参/出参（T267 组件，append-to-body 叠在本抽屉之上） -->
+    <LlmCallsDrawer ref="callsDrawer" />
   </div>
 </template>
 
@@ -83,13 +106,15 @@ import { useRouter } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 
 import StatusTag from './StatusTag.vue'
-import { jobRoute } from '../../constants'
+import LlmCallsDrawer from './LlmCallsDrawer.vue'
+import { isAiJobType, jobRoute } from '../../constants'
 import type { JobPayload } from '../../api/types'
 import { parseServerTime, useJobCenterStore } from '../../stores/jobCenter'
 
 const store = useJobCenterStore()
 const router = useRouter()
 const drawerOpen = ref(false)
+const callsDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
 
 // 已耗时本地每秒 tick（显示用，不写回 store）
 const now = ref(Date.now())
@@ -128,6 +153,11 @@ function go(job: JobPayload) {
   if (!route) return // 未映射类型：保持抽屉打开定位该任务（契约 §5 回退口径）
   drawerOpen.value = false
   void router.push(route)
+}
+
+/** 打开该任务的 LLM 调用明细（不改导航、不关任务抽屉——明细叠在其上） */
+function openCalls(job: JobPayload) {
+  callsDrawer.value?.open({ jobId: job.id, title: `AI 调用明细 · 任务 #${job.id}` })
 }
 </script>
 
