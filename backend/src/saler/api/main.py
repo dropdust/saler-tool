@@ -44,6 +44,7 @@ from saler.core.errors import (
 )
 from saler.db.session import make_session_factory
 from saler.jobs.engine import JobManager
+from saler.jobs.reconcile import reconcile_interrupted_jobs
 from saler.security.token import AppToken
 from saler.services import settings_service
 
@@ -96,6 +97,12 @@ def create_app(
     app.state.token = app_token
     app.state.job_manager = job_manager or JobManager(session_factory)
     app.state.data_dir = data_dir
+    # 启动对账（005-T246）：进程退出遗留的非终态任务 → interrupted（只改状态、绝不自动重放）。
+    # 四个入口（桌面 / --server / dev / 测试）都经本工厂，故此处覆盖即可。
+    try:
+        reconcile_interrupted_jobs(session_factory)
+    except Exception:  # noqa: BLE001 - 对账失败不阻断启动（沿用启动维护的口径）
+        logger.exception("启动对账失败（忽略，不影响使用）")
 
     @app.middleware("http")
     async def _auth_middleware(request: Request, call_next):
