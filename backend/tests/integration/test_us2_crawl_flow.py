@@ -1,6 +1,12 @@
-"""T051 集成测试：S6/S7（API 全链路）——挖掘→线索修订→排除→导出→导入。"""
+"""T051 集成测试：S6/S7（API 全链路）——挖掘→线索修订→排除→导出→导入。
+
+T247/FR-019 追加：`crawl_job` 明细与任务台账**全周期一致**（running → completed/failed/cancelled）。
+"""
 
 from __future__ import annotations
+
+import asyncio
+import time
 
 from tests.conftest import wait_job
 from tests.fixtures.fakes.fetcher_fake import FakeFetcher
@@ -34,6 +40,69 @@ def _inject_offline_pipeline(monkeypatch) -> FakeFetcher:
     )
     monkeypatch.setattr("saler.api.routes.crawl.Fetcher", lambda **_kwargs: fetcher)
     return fetcher
+
+
+def _detail(client, crawl_job_id: int) -> dict:
+    return client.get(f"/api/v1/crawl/jobs/{crawl_job_id}").json()
+
+
+def _start_crawl(client, monkeypatch) -> dict:
+    _inject_offline_pipeline(monkeypatch)
+    seed = client.post(
+        "/api/v1/seeds", json={"query": "power fittings contractor kenya", "batch": "t247"}
+    ).json()
+    resp = client.post("/api/v1/crawl/jobs", json={"seed_ids": [seed["id"]]})
+    assert resp.status_code == 202, resp.text
+    return resp.json()
+
+
+def test_crawl_detail_follows_ledger_on_success(client, monkeypatch):
+    """成功路径：明细随台账 queued → running → completed，并写 started_at/finished_at 与 stats。"""
+    created = _start_crawl(client, monkeypatch)
+    job = wait_job(client, created["job_id"])
+    assert job["status"] == "completed"
+    row = _detail(client, created["crawl_job_id"])
+    assert row["status"] == "completed"
+    assert row["started_at"] is not None and row["finished_at"] is not None
+    assert row["stats"]["domains_done"] == 2  # 明细侧保留产量（与台账 result 同源）
+
+
+def test_crawl_detail_follows_ledger_on_failure(client, monkeypatch):
+    """失败路径：台账 failed ⇒ 明细 failed（不再永远停在 queued）。"""
+
+    async def _boom(self, ctx, **_kwargs):
+        raise RuntimeError("engine exploded")
+
+    monkeypatch.setattr("saler.api.routes.crawl.CrawlEngine.run", _boom)
+    created = _start_crawl(client, monkeypatch)
+    job = wait_job(client, created["job_id"])
+    assert job["status"] == "failed"
+    row = _detail(client, created["crawl_job_id"])
+    assert row["status"] == "failed"
+    assert row["started_at"] is not None and row["finished_at"] is not None
+
+
+def test_crawl_detail_follows_ledger_on_cancel(client, monkeypatch):
+    """取消路径：中途取消 ⇒ 明细 cancelled（用户操作，区别于 interrupted/failed）。"""
+
+    async def _hang(self, ctx, **_kwargs):
+        await asyncio.sleep(30)  # 卡在协作点之外，等取消注入 CancelledError
+        return {}
+
+    monkeypatch.setattr("saler.api.routes.crawl.CrawlEngine.run", _hang)
+    created = _start_crawl(client, monkeypatch)
+    for _ in range(300):  # 等明细进入 running（任务协程已在 await 上）
+        if _detail(client, created["crawl_job_id"])["status"] == "running":
+            break
+        time.sleep(0.01)
+    assert _detail(client, created["crawl_job_id"])["status"] == "running"
+
+    assert client.post(f"/api/v1/jobs/{created['job_id']}/cancel").status_code == 200
+    job = wait_job(client, created["job_id"])
+    assert job["status"] == "cancelled"
+    row = _detail(client, created["crawl_job_id"])
+    assert row["status"] == "cancelled"
+    assert row["finished_at"] is not None
 
 
 def test_crawl_without_search_provider_is_409(client):

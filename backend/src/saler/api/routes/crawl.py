@@ -1,10 +1,18 @@
-"""挖掘任务与候选域名 API（FR-019~026）。"""
+"""挖掘任务与候选域名 API（FR-019~026）。
+
+`crawl_job`（领域明细）与 `job`（任务台账）**全周期一致**（FR-019）：运行工厂在入口把明细
+置 `running`（写 `started_at`），成功/失败/取消分别收口为 `completed`/`failed`/`cancelled`
+（写 `finished_at`）；进程退出遗留的非终态由启动对账收口为 `interrupted`（jobs/reconcile.py）。
+"""
 
 from __future__ import annotations
 
+import asyncio
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from saler.api.deps import get_session, paginate, pagination
 from saler.api.errors import ApiError, not_found
@@ -13,8 +21,35 @@ from saler.core.leads.crawl_engine import CrawlConfig, CrawlEngine
 from saler.core.leads.fetcher import Fetcher
 from saler.core.leads.search_setup import resolve_search_chain
 from saler.db.models import CrawlJob
+from saler.jobs.engine import JobCancelled
 
 router = APIRouter(tags=["crawl"])
+
+
+def mark_crawl_detail(
+    session_factory: sessionmaker[Session],
+    crawl_job_id: int,
+    status: str,
+    *,
+    stats: dict | None = None,
+) -> None:
+    """把挖掘领域明细推进到 `status`：running 写 started_at，终态写 finished_at（与状态同刻）。
+
+    台账与明细同源推进是 FR-019 的硬要求——明细落后会让"挖掘任务页"显示与实际不符的状态。
+    """
+    with session_factory() as session:
+        row = session.get(CrawlJob, crawl_job_id)
+        if row is None:
+            return
+        row.status = status
+        now = datetime.now(UTC)
+        if status == "running":
+            row.started_at = now
+        else:
+            row.finished_at = now
+        if stats is not None:
+            row.stats = stats
+        session.commit()
 
 
 class CrawlJobRequest(BaseModel):
@@ -45,7 +80,10 @@ async def create_crawl_job(
     db.commit()
     job_id = manager.create("crawl", name="客户线索挖掘", ref_type="crawl_job", ref_id=record.id)
 
+    session_factory = request.app.state.session_factory
+
     async def run_job(ctx):
+        mark_crawl_detail(session_factory, record.id, "running")  # 明细随台账进入运行态
         fetcher = Fetcher(
             proxy=config.proxy,
             timeout_s=config.timeout_s,
@@ -53,18 +91,18 @@ async def create_crawl_job(
             respect_robots=config.respect_robots,
         )
         try:
-            engine = CrawlEngine(
-                request.app.state.session_factory, chain, fetcher, config=config
-            )
+            engine = CrawlEngine(session_factory, chain, fetcher, config=config)
             result = await engine.run(ctx, seed_ids=payload.seed_ids, job_id=job_id)
+        except (asyncio.CancelledError, JobCancelled):
+            mark_crawl_detail(session_factory, record.id, "cancelled")  # 用户取消
+            raise
+        except Exception:
+            mark_crawl_detail(session_factory, record.id, "failed")  # 运行出错
+            raise
+        else:
+            mark_crawl_detail(session_factory, record.id, "completed", stats=result)
         finally:
             await fetcher.aclose()
-        with request.app.state.session_factory() as session:
-            row = session.get(CrawlJob, record.id)
-            if row is not None:
-                row.status = "completed"
-                row.stats = result
-                session.commit()
         return result
 
     manager.start(job_id, run_job)
