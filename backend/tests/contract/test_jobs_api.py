@@ -12,6 +12,7 @@ import json
 import httpx
 
 from saler.db.models import Job
+from tests.conftest import wait_job
 
 
 def _seed_jobs(session_factory, specs: list[tuple[str, str]]) -> list[int]:
@@ -140,3 +141,85 @@ def test_interrupted_rejects_control(client, session_factory):
     for action in ("pause", "resume", "cancel"):
         resp = client.post(f"/api/v1/jobs/{job_id}/{action}")
         assert resp.status_code == 409, f"{action}: {resp.text}"
+
+
+# ---------- 重跑（契约 §3：三守卫 + 成功 + 新任务元数据） ----------
+
+
+def test_rerun_missing_job_404(client):
+    assert client.post("/api/v1/jobs/404/rerun").status_code == 404
+
+
+def test_rerun_type_without_starter_409(client, session_factory):
+    (job_id,) = _seed_jobs(session_factory, [("campaign_send", "failed")])
+    resp = client.post(f"/api/v1/jobs/{job_id}/rerun")
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["code"] == "not_rerunnable"
+    assert "重新运行" in body["message"] and "重新发起" in body["message"]  # 附后续指引语义
+
+
+def test_rerun_non_terminal_409(client, session_factory):
+    (job_id,) = _seed_jobs(session_factory, [("company_import", "running")])
+    resp = client.post(f"/api/v1/jobs/{job_id}/rerun")
+    assert resp.status_code == 409 and resp.json()["code"] == "not_terminal"
+
+
+def test_rerun_completed_409(client, session_factory):
+    (job_id,) = _seed_jobs(session_factory, [("company_import", "completed")])
+    resp = client.post(f"/api/v1/jobs/{job_id}/rerun")
+    assert resp.status_code == 409 and resp.json()["code"] == "already_completed"
+
+
+def test_rerun_import_rebuilds_request_and_drops_old_payload(client, session_factory):
+    """以原 `params` 重建请求；新任务**不复制** progress/result/error（哨兵值验证）。"""
+    with session_factory() as db:
+        original = Job(
+            job_type="ingest_harvest",
+            name="回灌收割结果",
+            status="failed",
+            params={"path": "/nonexistent/rerun.csv", "content": None},
+            progress={"phase": "SENTINEL-PROGRESS"},
+            result={"rows": 999},
+            error="SENTINEL-ERROR",
+        )
+        db.add(original)
+        db.commit()
+        original_id = original.id
+
+    resp = client.post(f"/api/v1/jobs/{original_id}/rerun")
+    assert resp.status_code == 202, resp.text
+    new_id = resp.json()["job_id"]
+    assert new_id != original_id
+
+    row = wait_job(client, new_id)  # 坏路径必然失败，但失败是"它自己"的
+    assert row["job_type"] == "ingest_harvest" and row["name"] == "回灌收割结果"
+    assert row["result"] is None
+    assert "SENTINEL" not in json.dumps(row, ensure_ascii=False)
+    with session_factory() as db:  # params 不进 API 负载（可能含整份名单内容）→ 落库侧核对
+        rerun = db.get(Job, new_id)
+        assert rerun.params == {"path": "/nonexistent/rerun.csv", "content": None}
+        assert rerun.progress == {} and rerun.result is None
+        assert "SENTINEL" not in (rerun.error or "")  # 失败原因是它自己的
+
+
+def test_rerun_failed_harvest_after_fix_end_to_end(client, session_factory, tmp_path):
+    """真实起点：回灌失败（文件缺失）→ 补上文件 → 重跑同参数并完成（用户主动操作）。"""
+    harvest = tmp_path / "harvest.jsonl"
+    failed = client.post("/api/v1/seeds/ingest", json={"path": str(harvest)})
+    assert failed.status_code == 202
+    original = wait_job(client, failed.json()["job_id"])
+    assert original["status"] == "failed"
+
+    harvest.write_text(
+        '{"seed_query": "rerun 电力金具", "results": [{"url": "https://r.example.com/", "title": "R"}]}\n',
+        encoding="utf-8",
+    )
+    resp = client.post(f"/api/v1/jobs/{original['id']}/rerun")
+    assert resp.status_code == 202, resp.text
+    rerun = wait_job(client, resp.json()["job_id"])
+    assert rerun["status"] == "completed"
+    assert rerun["job_type"] == "ingest_harvest" and rerun["name"] == original["name"]
+    assert rerun["id"] != original["id"]
+    with session_factory() as db:  # params 不进 API 负载 → 落库侧核对"原样重建"
+        assert db.get(Job, rerun["id"]).params["path"] == str(harvest)

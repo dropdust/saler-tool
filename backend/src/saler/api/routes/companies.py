@@ -17,6 +17,7 @@ from saler.core.errors import NotFound as DomainNotFound
 from saler.core.leads import company_service
 from saler.core.leads.extractor import normalize_email
 from saler.db.models import Company, Contact
+from saler.jobs.catalog import register_starter
 from saler.services import export_leads
 from saler.services.import_customers import run_import
 
@@ -115,15 +116,28 @@ def merge_companies(payload: MergeRequest, db: Session = Depends(get_session)) -
     )
 
 
-@router.post("/import", status_code=202)
-async def import_companies(payload: ImportRequest, request: Request) -> dict:
+def start_company_import_job(request: Request, *, params: dict) -> dict:
+    """装配并启动一次客户名单导入——原发端点与重跑 starter 共用同一路径。"""
     manager = request.app.state.job_manager
-    job_id = manager.create("company_import", name="导入客户名单", params=payload.model_dump())
+    job_id = manager.create("company_import", name="导入客户名单", params=params)
     manager.start(
         job_id,
-        lambda ctx: run_import(ctx, request.app.state.session_factory, payload=payload.model_dump()),
+        lambda ctx: run_import(ctx, request.app.state.session_factory, payload=params),
     )
     return {"job_id": job_id}
+
+
+def _rerun_company_import(request: Request, _db, job) -> dict:
+    """重跑 starter（契约 §3）：以原任务 params 原样重建导入请求。"""
+    return start_company_import_job(request, params=dict(job.params or {}))
+
+
+register_starter("company_import", _rerun_company_import)
+
+
+@router.post("/import", status_code=202)
+async def import_companies(payload: ImportRequest, request: Request) -> dict:
+    return start_company_import_job(request, params=payload.model_dump())
 
 
 @router.post("/export")

@@ -53,7 +53,7 @@ def _start_crawl(client, monkeypatch) -> dict:
     ).json()
     resp = client.post("/api/v1/crawl/jobs", json={"seed_ids": [seed["id"]]})
     assert resp.status_code == 202, resp.text
-    return resp.json()
+    return {**resp.json(), "seed_id": seed["id"]}
 
 
 def test_crawl_detail_follows_ledger_on_success(client, monkeypatch):
@@ -103,6 +103,42 @@ def test_crawl_detail_follows_ledger_on_cancel(client, monkeypatch):
     row = _detail(client, created["crawl_job_id"])
     assert row["status"] == "cancelled"
     assert row["finished_at"] is not None
+
+
+def test_crawl_rerun_rebuilds_from_scope_and_config(client, monkeypatch):
+    """重跑（T274/契约 §3）：失败任务可重跑——从原 CrawlJob.scope/config 复原新明细并跑完。
+
+    已完成的任务不可重跑（already_completed，见 contract/test_jobs_api.py）。
+    """
+    from saler.core.leads.crawl_engine import CrawlEngine
+
+    real_run = CrawlEngine.run
+    failing = {"on": True}
+
+    async def _maybe_boom(self, ctx, **kwargs):
+        if failing["on"]:
+            raise RuntimeError("first attempt fails")
+        return await real_run(self, ctx, **kwargs)
+
+    monkeypatch.setattr("saler.api.routes.crawl.CrawlEngine.run", _maybe_boom)  # 先失败一次
+    created = _start_crawl(client, monkeypatch)
+    assert wait_job(client, created["job_id"])["status"] == "failed"
+    assert _detail(client, created["crawl_job_id"])["status"] == "failed"
+
+    failing["on"] = False  # 修好后再重跑
+    resp = client.post(f"/api/v1/jobs/{created['job_id']}/rerun")
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["job_id"] != created["job_id"]
+    assert body["crawl_job_id"] != created["crawl_job_id"]  # 新明细，不复用旧行
+
+    rerun = wait_job(client, body["job_id"])
+    assert rerun["status"] == "completed"
+    assert rerun["ref_type"] == "crawl_job" and rerun["ref_id"] == body["crawl_job_id"]
+    detail = _detail(client, body["crawl_job_id"])
+    assert detail["status"] == "completed"
+    assert detail["scope"]["seed_ids"] == [created["seed_id"]]  # 范围原样复原
+    assert detail["config"]["concurrency"] == 5  # 配置原样复原
 
 
 def test_crawl_without_search_provider_is_409(client):

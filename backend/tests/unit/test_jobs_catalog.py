@@ -50,16 +50,31 @@ def test_meta_default_for_unknown_type():
     assert catalog.get_starter("nope") is None
 
 
+def test_rerunnable_types_all_have_registered_starter_and_vice_versa():
+    """注册表与 rerunnable 声明双向一致（T274/契约 §3）——导入路由模块即完成注册。"""
+    import saler.api.main  # noqa: F401 - 路由模块 import 时注册 starter（registry 惯用法）
+
+    declared = {key for key, meta in catalog.JOB_TYPES.items() if meta.rerunnable}
+    registered = {key for key in catalog.JOB_TYPES if catalog.get_starter(key) is not None}
+    assert registered == declared == EXPECTED_RERUNNABLE
+
+
 def test_starter_registry_roundtrip():
     def _starter(request, db, original):  # noqa: ANN001, ARG001
         return {"job_id": 1}
 
+    import saler.api.main  # noqa: F401 - 注册表是进程级全局，先确保真实注册已就位
+
+    previous = catalog.get_starter("crawl")
     catalog.register_starter("crawl", _starter)
     try:
         assert catalog.get_starter("crawl") is _starter
-    finally:
-        catalog._RERUN_STARTERS.pop("crawl", None)
-    assert catalog.get_starter("crawl") is None
+    finally:  # 还原真实注册：注册表是全局的，pop 掉会污染后续测试（如重跑链路）
+        if previous is None:
+            catalog._RERUN_STARTERS.pop("crawl", None)
+        else:
+            catalog._RERUN_STARTERS["crawl"] = previous
+    assert catalog.get_starter("crawl") is previous
 
 
 def test_job_to_dict_derives_capabilities():

@@ -1,4 +1,4 @@
-"""任务 API：列表 / 详情 / SSE 事件流 / 暂停恢复取消。"""
+"""任务 API：列表 / 详情 / SSE 事件流 / 暂停恢复取消 / 重跑。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from saler.api.deps import get_session, paginate, pagination
 from saler.api.errors import conflict, not_found, unprocessable
 from saler.api.serializers import job_to_dict
 from saler.db.models import Job
+from saler.jobs.catalog import get_starter
 from saler.jobs.engine import JOB_STATUSES, TERMINAL_STATUSES
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -125,3 +126,27 @@ def resume_job(job_id: int, request: Request) -> dict:
 @router.post("/{job_id}/cancel")
 def cancel_job(job_id: int, request: Request) -> dict:
     return _control(job_id, request, "cancel")
+
+
+@router.post("/{job_id}/rerun", status_code=202)
+async def rerun_job(job_id: int, request: Request, db: Session = Depends(get_session)) -> dict:
+    """重新运行一个**已失败/已取消/已中断**的可重跑任务（契约 §3）。
+
+    - 重跑可能触发检索/写入，属用户主动操作；服务端绝不自动重跑（启动对账只改状态）；
+    - starter 负责重建执行上下文（crawl 从 CrawlJob.scope/config 复原并建新明细，
+      回灌/导入以原 params 重建请求）；新任务不复制 progress/result/error。
+    """
+    job = db.get(Job, job_id)
+    if job is None:
+        raise not_found("任务")
+    starter = get_starter(job.job_type)
+    if starter is None:
+        raise conflict(
+            "该任务类型不支持重新运行；请前往相关页面检查后重新发起",
+            code="not_rerunnable",
+        )
+    if job.status not in TERMINAL_STATUSES:
+        raise conflict(f"任务尚未结束（{job.status}），无法重新运行", code="not_terminal")
+    if job.status == "completed":
+        raise conflict("任务已完成，无需重新运行", code="already_completed")
+    return starter(request, db, job)

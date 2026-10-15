@@ -21,6 +21,7 @@ from saler.core.leads.crawl_engine import CrawlConfig, CrawlEngine
 from saler.core.leads.fetcher import Fetcher
 from saler.core.leads.search_setup import resolve_search_chain
 from saler.db.models import CrawlJob
+from saler.jobs.catalog import register_starter
 from saler.jobs.engine import JobCancelled
 
 router = APIRouter(tags=["crawl"])
@@ -57,11 +58,11 @@ class CrawlJobRequest(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
-@router.post("/crawl/jobs", status_code=202)
-async def create_crawl_job(
-    payload: CrawlJobRequest, request: Request, db: Session = Depends(get_session)
+def start_crawl_job(
+    request: Request, db: Session, *, seed_ids: list[int] | None, config_raw: dict
 ) -> dict:
-    config = CrawlConfig.from_dict(payload.config)
+    """装配并启动一次挖掘（台账 + 明细）——原发端点与重跑 starter 共用同一路径。"""
+    config = CrawlConfig.from_dict(config_raw)
     chain = resolve_search_chain(db, config, session_factory=request.app.state.session_factory)
     if chain is None:
         raise ApiError(
@@ -72,7 +73,7 @@ async def create_crawl_job(
     manager = request.app.state.job_manager
     record = CrawlJob(
         name="客户线索挖掘",
-        scope={"seed_ids": payload.seed_ids},
+        scope={"seed_ids": seed_ids},
         config=config.to_dict(),
         status="queued",
     )
@@ -92,7 +93,7 @@ async def create_crawl_job(
         )
         try:
             engine = CrawlEngine(session_factory, chain, fetcher, config=config)
-            result = await engine.run(ctx, seed_ids=payload.seed_ids, job_id=job_id)
+            result = await engine.run(ctx, seed_ids=seed_ids, job_id=job_id)
         except (asyncio.CancelledError, JobCancelled):
             mark_crawl_detail(session_factory, record.id, "cancelled")  # 用户取消
             raise
@@ -107,6 +108,33 @@ async def create_crawl_job(
 
     manager.start(job_id, run_job)
     return {"job_id": job_id, "crawl_job_id": record.id}
+
+
+def _rerun_crawl(request: Request, db: Session, job) -> dict:
+    """重跑 starter（契约 §3）：从原明细的 scope/config 复原，建新明细行并启动新任务。"""
+    detail = db.get(CrawlJob, job.ref_id) if job.ref_id is not None else None
+    if detail is None:
+        raise ApiError(
+            409,
+            "not_rerunnable",
+            "原挖掘明细已不存在，无法重新运行；请前往挖掘任务页重新发起",
+        )
+    return start_crawl_job(
+        request,
+        db,
+        seed_ids=(detail.scope or {}).get("seed_ids"),
+        config_raw=detail.config or {},
+    )
+
+
+register_starter("crawl", _rerun_crawl)
+
+
+@router.post("/crawl/jobs", status_code=202)
+async def create_crawl_job(
+    payload: CrawlJobRequest, request: Request, db: Session = Depends(get_session)
+) -> dict:
+    return start_crawl_job(request, db, seed_ids=payload.seed_ids, config_raw=payload.config)
 
 
 @router.get("/crawl/jobs")

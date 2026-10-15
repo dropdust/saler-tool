@@ -16,6 +16,7 @@ from saler.core.leads.search_setup import resolve_search_chain
 from saler.core.seeds import service as seed_service
 from saler.core.seeds.discover import run_discover
 from saler.core.seeds.verifiers import run_validation
+from saler.jobs.catalog import register_starter
 from saler.services import export_seeds
 from saler.services.ingest_harvest import run_ingest
 
@@ -181,19 +182,28 @@ def export(payload: ExportRequest, request: Request, db: Session = Depends(get_s
     )
 
 
-@router.post("/ingest", status_code=202)
-async def ingest(payload: IngestRequest, request: Request) -> dict:
+def start_ingest_job(request: Request, *, params: dict) -> dict:
+    """装配并启动一次回灌——原发端点与重跑 starter 共用同一路径。"""
     manager = request.app.state.job_manager
-    job_id = manager.create("ingest_harvest", name="回灌收割结果", params=payload.model_dump())
+    job_id = manager.create("ingest_harvest", name="回灌收割结果", params=params)
     manager.start(
         job_id,
-        lambda ctx: run_ingest(
-            ctx,
-            request.app.state.session_factory,
-            payload=payload.model_dump(),
-        ),
+        lambda ctx: run_ingest(ctx, request.app.state.session_factory, payload=params),
     )
     return {"job_id": job_id}
+
+
+def _rerun_ingest(request: Request, _db, job) -> dict:
+    """重跑 starter（契约 §3）：以原任务 params 原样重建回灌请求。"""
+    return start_ingest_job(request, params=dict(job.params or {}))
+
+
+register_starter("ingest_harvest", _rerun_ingest)
+
+
+@router.post("/ingest", status_code=202)
+async def ingest(payload: IngestRequest, request: Request) -> dict:
+    return start_ingest_job(request, params=payload.model_dump())
 
 
 @router.post("/validate", status_code=202)
