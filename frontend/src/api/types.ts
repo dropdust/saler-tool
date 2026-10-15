@@ -393,6 +393,37 @@ export interface CampaignReportRow {
   by_round: Record<string, Record<string, number>>
 }
 
+export interface LlmCallMessage {
+  role: string
+  content: unknown
+}
+
+/** LLM 调用明细行（llm_call 表 / `llm_call_to_dict`）：逐次尝试的完整输入与原始输出。 */
+export interface LlmCallRow {
+  id: number
+  ts: string | null
+  job_id: number | null
+  call_index: number
+  phase: string | null
+  operation: string
+  provider: string
+  model: string
+  attempt: number
+  ok: boolean
+  error_kind: string | null
+  error_detail: string | null
+  request_messages: LlmCallMessage[]
+  response_text: string | null
+  latency_ms: number | null
+  usage: Record<string, unknown> | null
+}
+
+/** `GET /ai/calls` 的 limit/offset 形状——与 `Paginated`（page/page_size）不同，勿复用。 */
+export interface LlmCallPage {
+  total: number
+  items: LlmCallRow[]
+}
+
 export interface SuppressionRow {
   id: number
   scope: 'email' | 'phone' | 'contact' | 'company' | 'domain'
