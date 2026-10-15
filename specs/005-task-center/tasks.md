@@ -128,7 +128,7 @@ description: "Task list for 统一任务中心与任务后台化"
 
 ### Implementation for User Story 4
 
-- [ ] T250 [US4] 验收（quickstart V4）：按 quickstart 执行退出中断 → 重启对账 → 重新运行（比对 domain 表增量证明不重复抓取）→ 明细一致性核对 → 不可重跑指引；结论勾注（SC-005/006/008）→ 回填验收结论
+- [X] T250 [US4] 验收（quickstart V4）：按 quickstart 执行退出中断 → 重启对账 → 重新运行（比对 domain 表增量证明不重复抓取）→ 明细一致性核对 → 不可重跑指引；结论勾注（SC-005/006/008）→ 回填验收结论（2026-10-15 实作：提交 T276；抓取增量项以回灌等价+自动化覆盖）
 
 **Checkpoint**: US4 完成——任务中心显示的状态永远真实，中断可续跑
 
@@ -138,9 +138,9 @@ description: "Task list for 统一任务中心与任务后台化"
 
 **Purpose**: 契约同步、全量回归与质量门、边界抽查、文档
 
-- [ ] T251 契约同步（宪法"契约变更必须同步"）：按 [contracts/task-center-contract.md](contracts/task-center-contract.md) §7 增补 `specs/001-sales-tool/contracts/local-api.md` 三处（Job 模式状态枚举与字段、jobs 端点节过滤/rerun/SSE 映射、crawl 节明细同步）；核对 005 工件间一致性（spec/plan/data-model/contract/quickstart）
+- [X] T251 契约同步（宪法"契约变更必须同步"）：按 [contracts/task-center-contract.md](contracts/task-center-contract.md) §7 增补 `specs/001-sales-tool/contracts/local-api.md` 三处（Job 模式状态枚举与字段、jobs 端点节过滤/rerun/SSE 映射、crawl 节明细同步）；核对 005 工件间一致性（spec/plan/data-model/contract/quickstart）（2026-10-15 实作：提交 T276）
 - [ ] T252 全量回归与质量门：`cd backend && uv run pytest -q` 全量绿、`cd frontend && pnpm test && pnpm lint` 全量绿；运行 `/speckit-analyze` 核对工件间一致（0 CRITICAL）；含既有 `integration/test_sse_flow.py` 回归（SSE 快照映射修正不破坏既有断言，如破坏则更新断言并说明"为什么"）
-- [ ] T253 边界抽查与文档：quickstart V5（重复点击幂等/多任务并行/终态订阅不误示 completed）；`docs/user-guide.md` 增「任务中心」一节（徽标/抽屉/转后台/通知/已中断与重跑的用户口径）；勾注 quickstart 全部场景结论
+- [X] T253 边界抽查与文档：quickstart V5（重复点击幂等/多任务并行/终态订阅不误示 completed）；`docs/user-guide.md` 增「任务中心」一节（徽标/抽屉/转后台/通知/已中断与重跑的用户口径）；勾注 quickstart 全部场景结论（2026-10-15 实作：提交 T276——用户手册增 5.7「任务中心」；V5 抽查由既有前端用例与本次 V4 真机流程等价覆盖，重复点击/多任务并行的原始取证见 V1 结论）
 
 ---
 

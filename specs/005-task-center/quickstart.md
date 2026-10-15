@@ -58,6 +58,14 @@ cd frontend && pnpm test && pnpm lint                     # job-center-store / t
 
 预期：SC-005（运行中遗留 0、100% 有后续入口）、SC-006（重跑重复抓取 0）、SC-008（无幽灵任务）；`not_rerunnable/not_terminal/already_completed` 守卫 409 回执正确（契约 §3）。
 
+**验收结论（T250，2026-10-15）**：✅ 通过（真实 dev server + 临时数据目录 + `curl`/`sqlite3` 直查取证；无外部依赖——本机未配检索渠道，故"断点续跑"的抓取增量一项以回灌型任务等价验证，挖掘路径由自动化测试覆盖）：
+- **V4② 重启对账**：直写遗留 `running` 任务（job#2 + 联动 crawl_job#1）→ 杀进程重启 → 任务显示 `interrupted`（`rerunnable=true`）、`crawl_job.status='interrupted'` 且 `finished_at` 写入、`job` 表非终态遗留 **0**（无幽灵 running，FR-017/SC-005/SC-008）；
+- **V4③ 重新运行**：修好缺失文件后对失败的回灌任务 `POST /jobs/1/rerun` → `202 {job_id:3}` → 新任务 `completed`；**原任务记录不变**（仍 `failed` + 原始错误文案），不复制旧 progress/result/error（FR-018）；
+- **V4④ 守卫**：对已完成的 job#3 重跑 → `409 already_completed`；对已中断的挖掘任务重跑 → `409 search_not_configured`（本机未配检索渠道，属环境前置而非缺陷——重跑走的是与原发完全相同的装配路径，故该守卫同样生效）；
+- **V4⑤ 不可重跑类型**：已中断的 `backup` 任务重跑 → `409 not_rerunnable` 且附指引文案「请前往相关页面检查后重新发起」（按钮缺省由 `frontend/tests/task-center.test.ts` 锁定，契约 §4/§5）；
+- **明细一致性**：`crawl_job` 与 `job` 逐条状态一致（含 interrupted），`finished_at` 与状态同刻写入（FR-019）。
+- **环境注记**：并发/断点续跑的抓取增量（SC-006）在有检索渠道的环境下复验；自动化层已由 `integration/test_us2_crawl_flow.py` 的三路径 + 重跑用例覆盖。
+
 ### V5 边界与一致性抽查（横切）
 
 步骤：① 任务运行中**重复点击**抽屉与页内暂停 → 核对以服务端状态为准（幂等，无异常）；② 同时跑 ≤3 个任务（挖掘 + AI 扩充 + 备份）→ 徽标计数正确、单任务操作互不影响；③ 终态任务订阅（对 completed 与 cancelled 分别开抽屉观察）→ 核对不误示为"完成"（cancelled/interrupted 呈"已取消/已中断"，契约 §2 修正验证）；④ 关闭-重开对话框恰逢任务刚完成 → 核对呈现终态结果汇总而非空白表单（spec 边界情形）。

@@ -19,12 +19,19 @@
 爬取、发送、AI 批量生成、导入、备份等一律异步任务化（规格 FR-024/026/048/053）：
 
 1. `POST /<operation>` → `202 { "job_id": 42 }`
-2. `GET /jobs/{id}` → `{ "id": 42, "type": "crawl", "status": "running|queued|paused|completed|failed|cancelled", "progress": {...}, "stats": {...}, "started_at": "...", "finished_at": null }`
+2. `GET /jobs/{id}` → `{ "id": 42, "type": "crawl", "status": "running|queued|paused|completed|failed|cancelled|interrupted", "progress": {...}, "stats": {...}, "started_at": "...", "finished_at": null, "can_pause": true, "rerunnable": false }`
+   - `interrupted`：进程退出遗留的非终态任务，**仅由启动对账写入**（区别于 failed=运行出错、cancelled=用户操作；005 增补）；
+   - `can_pause`/`rerunnable`：任务类型能力（目录派生，前端据此渲染暂停/重跑按钮；005 增补）；
+   - `params` **不进**响应负载（可能含整份名单内容）。
 3. `GET /jobs/{id}/events` → **SSE** 流，事件：
-   - `event: progress` — `{ "done": 120, "total": 500, "message": "抓取 example.com 联系页" }`
+   - `event: progress` — `{ "done": 120, "total": 500, "message": "抓取 example.com 联系页" }`；已终态任务订阅先发快照 `progress`，随即按状态分派终态事件后即断
    - `event: log` — `{ "level": "info|warn|error", "message": "..." }`
-   - `event: done` — `{ "result": {...} }` 或 `event: error` — `{ "code": "...", "message": "..." }`
-4. `POST /jobs/{id}/pause|resume|cancel`
+   - `event: done` — 仅 `completed`；其余终态 `event: error` — `{ "code": "job_failed|cancelled|interrupted", "message": "..." }`
+4. `POST /jobs/{id}/pause|resume|cancel`（终态一律 409）
+5. `POST /jobs/{id}/rerun` → `202 { "job_id": 57, ...starter 附加项 }`（005 增补）：
+   仅对"已失败/已取消/已中断"的**可重跑类型**（`crawl`/`ingest_harvest`/`company_import`）；
+   守卫三态 409——`not_rerunnable`（无 starter，附指引文案）/`not_terminal`/`already_completed`；
+   重跑属用户主动操作（服务端绝不自动重放）；新任务不复制 `progress/result/error`
 
 ## 端点清单（按模块）
 
@@ -73,7 +80,8 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/crawl/jobs` | 启动挖掘：`{scope:{seed_ids|filters}, config:{search_providers[], concurrency, rate, proxy, max_pages_per_site}}` → job |
+| POST | `/crawl/jobs` | 启动挖掘：`{scope:{seed_ids\|filters}, config:{search_providers[], concurrency, rate, proxy, max_pages_per_site}}` → `{job_id, crawl_job_id}` |
+| GET | `/crawl/jobs`；GET `/crawl/jobs/{id}` | 挖掘明细（领域台账）：`crawl_job.status` 与任务台账**全周期一致**（queued → running → completed/failed/cancelled；进程退出遗留由启动对账置 `interrupted`），`started_at/finished_at` 与状态同刻写入（005 增补，FR-019） |
 | GET | `/domains?status=&country=&excluded=&q=` | 候选域名列表 |
 | PUT | `/domains/{id}` | 人工修订（排除/恢复/改国家语言） |
 | GET | `/companies?filters...`；PUT `/companies/{id}` | 线索列表与修订（状态/标签/名称，FR-027） |
@@ -122,8 +130,9 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/jobs?type=&status=` | 任务列表 |
-| GET | `/jobs/{id}`；GET `/jobs/{id}/events`（SSE）；POST `/jobs/{id}/pause｜resume｜cancel` | 任务状态、事件流与控制 |
+| GET | `/jobs?type=&status=` | 任务列表；`status` 支持**逗号多值**（如 `running,paused,queued`），未知值 422（005 增补） |
+| GET | `/jobs/{id}`；GET `/jobs/{id}/events`（SSE）；POST `/jobs/{id}/pause｜resume｜cancel` | 任务状态、事件流与控制（见「长任务（Job）模式」） |
+| POST | `/jobs/{id}/rerun` | 重新运行失败/取消/中断的可重跑任务（005 增补，见「长任务（Job）模式」§5） |
 
 ## 兼容性约束
 
