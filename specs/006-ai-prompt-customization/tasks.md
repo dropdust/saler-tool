@@ -134,7 +134,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 **Purpose**: 契约同步、全量回归与质量门、边界抽查与文档
 
-- [ ] T294 契约同步（宪法"契约变更必须同步"）：按 [contracts/prompt-customization-contract.md](contracts/prompt-customization-contract.md) §9（模板库版）增补 `specs/001-sales-tool/contracts/local-api.md` §AI 节——新端点组（GET /ai/prompts、GET /ai/prompts/{feature}、POST/PUT/DELETE …/templates[/{id}]、PUT …/active、POST …/assist）与 `llm_call.operation` 新取值 `prompt_assist`（既有行不改）；核对 006 工件间一致性（spec/plan/research/data-model/contract/quickstart）
+- [X] T294 契约同步（宪法"契约变更必须同步"）：按 [contracts/prompt-customization-contract.md](contracts/prompt-customization-contract.md) §9（模板库版）增补 `specs/001-sales-tool/contracts/local-api.md` §AI 节——新端点组（GET /ai/prompts、GET /ai/prompts/{feature}、POST/PUT/DELETE …/templates[/{id}]、PUT …/active、POST …/assist）与 `llm_call.operation` 新取值 `prompt_assist`（既有行不改）；核对 006 工件间一致性（spec/plan/research/data-model/contract/quickstart）（2026-10-16 实作：local-api.md §大模型 增补 7 行（6 端点 + 提示词语义行），`/ai/calls` 行标注 prompt_assist 取值；工件一致性核对通过——spec FR-014/015、plan 摘要、research R9、data-model §1/§4、contract §1~§5、quickstart V1/V2 均已为模板库版）
 - [ ] T295 全量回归与质量门：`cd backend && uv run pytest -q` 全量绿、`cd frontend && pnpm test && pnpm lint` 全量绿；运行 `/speckit-analyze` 核对工件间一致（0 CRITICAL）；重点回归既有 `backend/tests/unit/test_seed_ai.py` 与内容流集成测试（运行管线替换不破坏既有断言，如破坏则更新断言并说明"为什么"）
 - [ ] T296 边界抽查与文档：quickstart V1 边界集复跑（空/超长/未知变量/缺变量/缺槽位兜底/重名/默认态保存引导/运行中切换或删除）；`docs/user-guide.md` 增「AI 提示词自定义与辅助」一节（入口/变量/固定结构/**模板库（另存为/切换即生效/重命名/删除回退/默认不可改）**/辅助与采用语义/明细核对的用户口径）；勾注 quickstart 全部场景结论
 

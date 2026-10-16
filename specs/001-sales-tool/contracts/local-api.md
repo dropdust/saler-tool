@@ -57,7 +57,15 @@
 | POST | `/ai/seeds/translate` | 中文种子/词表翻译：`{seed_ids|texts, targets:[lang]}` → job（FR-012/009） |
 | POST | `/ai/content/draft` | 中文母版辅助编写：`{theme_id, brief, tone, length?}` → job，产出 draft 版本（FR-038） |
 | POST | `/ai/content/translate` | 母版 → 目标语言版本：`{theme_id, master_variant_id, targets:[lang]}` → job（FR-038） |
-| GET | `/ai/calls?job_id=&operation=&limit=&offset=` | LLM 调用明细（逐次尝试的输入/输出/修复链/耗时/用量；新→旧）→ `{total, items[]}`；`ok` 三态（`null` = 进行中：请求已发出、尚未返回） |
+| GET | `/ai/calls?job_id=&operation=&limit=&offset=` | LLM 调用明细（逐次尝试的输入/输出/修复链/耗时/用量；新→旧）→ `{total, items[]}`；`ok` 三态（`null` = 进行中：请求已发出、尚未返回）；`operation` 含 `prompt_assist`（006 辅助调用，`job_id` 为 null） |
+| GET | `/ai/prompts` | 提示词模板库状态列表（006）：两功能 `{feature,label,customized,active_id,active_name,template_count}` 固定顺序 |
+| GET | `/ai/prompts/{feature}` | 模板详情（006）：生效状态 + `templates[]` 全文 + 变量目录/保留槽位/固定段 + 上限；未知 feature → 404 |
+| POST | `/ai/prompts/{feature}/templates` | 创建/另存为（006）：`{name, content, activate?}` → 201 详情 + `warnings[]`；名称/容量/内容规则 → 400（warnings 不阻断） |
+| PUT | `/ai/prompts/{feature}/templates/{id}` | 更新内容/重命名（006）：`{name?, content?}`；未知 id → 404 |
+| DELETE | `/ai/prompts/{feature}/templates/{id}` | 删除模板（006）：删除生效模板自动回退内置默认（模板库保留其余） |
+| PUT | `/ai/prompts/{feature}/active` | 切换生效/恢复默认（006）：`{id \| null}`；null=切回内置默认；未知 id → 404 |
+| POST | `/ai/prompts/{feature}/assist` | AI 辅助编写（006）：`{mode: generate\|polish, intent?, draft?}` → `{suggestion, notes}`；同步短调用（60s 时限），建议不入库，逐次尝试落 llm_call（`operation=prompt_assist`、`job_id=NULL`）；参数 400 / 未配置 409 `llm_not_configured` |
+| — | 提示词语义 | 模板变量 `{name}` 精确替换、`{{...}}`（内容占位符）豁免；`{output_contract}` = 机器解析依赖的固定段槽位（不可编辑，缺失运行期自动补尾）；运行期在任务开始时定格生效模板；运行与辅助的完整提示词均可见于 `/ai/calls`（006 契约 §6/§7） |
 
 ### 种子知识库（US1）
 
