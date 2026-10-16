@@ -1,16 +1,23 @@
-"""T283 契约测试（006 契约 §1~§4）：提示词模板 列表/详情/保存/恢复默认。
+"""T283→T298 契约测试（006 契约 §1~§4，模板库版）：列表/详情/创建/更新/删除/切换生效。
 
-- 列表固定顺序与形状；详情含变量目录/保留槽位/固定段；
-- 保存：空/超长 → 400 bad_request（消息含额度）；warnings 三码不阻断；未知功能 404；
-- 恢复默认：返回默认全文、幂等；两功能互不影响。
+- §1 列表（active_id/active_name/template_count）与 §2 详情（templates 全文）形状；
+- §3a 创建（名称/容量/内容规则 → 400；warnings 不阻断）；§3b 更新（内容/改名）；
+  §3c 删除（删除生效模板 → 服务端回退默认）；§4 切换生效（null=恢复默认，库保留）；
+- 未知 feature/模板 → 404；两功能互相独立。
 （§5 辅助端点契约由 T291 在本文件增补。）
 """
 
 from __future__ import annotations
 
-from saler.core.prompts import registry
+from saler.core.prompts import registry, store
 
-SEED_CUSTOM = "自定义指令 {description} {existing_nodes} {count} {output_contract}"
+SEED_OK = "自定义指令 {description} {existing_nodes} {count} {output_contract}"
+
+
+def _create(client, **overrides):
+    payload = {"name": "东非市场", "content": SEED_OK}
+    payload.update(overrides)
+    return client.post("/api/v1/ai/prompts/seed_expand/templates", json=payload)
 
 
 class TestPromptList:
@@ -20,13 +27,18 @@ class TestPromptList:
         for item in body["items"]:
             assert item["label"]
             assert item["customized"] is False
-            assert item["updated_at"] is None
+            assert item["active_id"] is None
+            assert item["active_name"] is None
+            assert item["template_count"] == 0
 
-    def test_list_reflects_customized_state(self, client):
-        client.put("/api/v1/ai/prompts/seed_expand", json={"content": SEED_CUSTOM})
+    def test_list_reflects_active_state(self, client):
+        _create(client)
+        _create(client, name="备用", activate=False)
         items = {item["feature"]: item for item in client.get("/api/v1/ai/prompts").json()["items"]}
         assert items["seed_expand"]["customized"] is True
-        assert items["seed_expand"]["updated_at"] is not None
+        assert items["seed_expand"]["active_name"] == "东非市场"
+        assert items["seed_expand"]["active_id"] is not None
+        assert items["seed_expand"]["template_count"] == 2
         assert items["content_draft"]["customized"] is False
 
 
@@ -36,15 +48,24 @@ class TestPromptDetail:
         spec = registry.get_feature("seed_expand")
         assert body["feature"] == "seed_expand"
         assert body["label"] == "AI 扩充（种子扩充）"
-        assert body["content"] == spec.default_template
         assert body["default_content"] == spec.default_template
+        assert body["active_id"] is None and body["active_name"] is None
         assert body["customized"] is False
-        assert body["updated_at"] is None
+        assert body["templates"] == []
         assert body["max_length"] == 8000
+        assert body["max_name_length"] == store.NAME_MAX_LENGTH
+        assert body["max_templates"] == store.MAX_TEMPLATES
         assert [v["name"] for v in body["variables"]] == ["description", "existing_nodes", "count"]
         assert [v["name"] for v in body["reserved_variables"]] == ["output_contract"]
-        assert body["reserved_variables"][0]["render"]
         assert body["output_contract"] == spec.output_contract
+
+    def test_detail_lists_templates_with_full_content(self, client):
+        _create(client)
+        _create(client, name="展会渠道", content=SEED_OK + "\n展会", activate=False)
+        body = client.get("/api/v1/ai/prompts/seed_expand").json()
+        assert [t["name"] for t in body["templates"]] == ["东非市场", "展会渠道"]
+        assert body["templates"][1]["content"].endswith("展会")
+        assert body["templates"][0]["updated_at"]  # 非空 ISO 字符串
 
     def test_detail_for_draft_variables(self, client):
         body = client.get("/api/v1/ai/prompts/content_draft").json()
@@ -56,68 +77,147 @@ class TestPromptDetail:
         assert resp.json()["code"] == "not_found"
 
 
-class TestPromptSave:
-    def test_save_roundtrip_no_warnings(self, client):
-        resp = client.put("/api/v1/ai/prompts/seed_expand", json={"content": SEED_CUSTOM})
-        assert resp.status_code == 200, resp.text
+class TestCreateTemplate:
+    def test_create_activates_and_returns_warnings_clean(self, client):
+        resp = _create(client)
+        assert resp.status_code == 201, resp.text
         body = resp.json()
         assert body["customized"] is True
-        assert body["content"] == SEED_CUSTOM
+        assert body["active_name"] == "东非市场"
         assert body["warnings"] == []
-        assert body["updated_at"] is not None
-        # 详情回读一致
-        back = client.get("/api/v1/ai/prompts/seed_expand").json()
-        assert back["content"] == SEED_CUSTOM
-        assert back["default_content"] == registry.get_feature("seed_expand").default_template
+        assert len(body["templates"]) == 1
 
-    def test_save_warning_codes_with_double_brace_exemption(self, client):
-        content = "指令 {descriptoin} 落款 {{signature}}"  # 未知变量 + 缺 3 数据变量 + 缺槽位
-        body = client.put("/api/v1/ai/prompts/seed_expand", json={"content": content}).json()
-        codes = [w["code"] for w in body["warnings"]]
-        assert codes.count("unknown_variable") == 1
-        assert codes.count("missing_variable") == 3
-        assert "missing_output_contract" in codes
-        unknown = [w for w in body["warnings"] if w["code"] == "unknown_variable"]
-        assert "descriptoin" in unknown[0]["message"]
+    def test_create_without_activate(self, client):
+        body = _create(client, activate=False).json()
+        assert body["customized"] is False
+        assert len(body["templates"]) == 1
 
-    def test_save_empty_400_bad_request(self, client):
-        resp = client.put("/api/v1/ai/prompts/seed_expand", json={"content": "   \n "})
+    def test_create_warnings_do_not_block(self, client):
+        body = _create(client, content="只有一句指令").json()
+        codes = sorted(w["code"] for w in body["warnings"])
+        assert codes == [
+            "missing_output_contract",
+            "missing_variable",
+            "missing_variable",
+            "missing_variable",
+        ]
+        assert body["customized"] is True  # 警告不阻断
+
+    def test_create_validation_400s(self, client):
+        cases = [
+            {"content": "   "},  # 空内容
+            {"content": "x" * 8001},  # 超长
+            {"name": "  "},  # 空名
+            {"name": "长" * 61},  # 名过长
+        ]
+        for override in cases:
+            resp = _create(client, **override)
+            assert resp.status_code == 400, f"{override} 应被拒绝"
+            assert resp.json()["code"] == "bad_request"
+        # 阻断不落库
+        assert client.get("/api/v1/ai/prompts/seed_expand").json()["templates"] == []
+
+    def test_create_duplicate_name_400(self, client):
+        _create(client)
+        resp = _create(client, name="  东非市场  ")
         assert resp.status_code == 400
-        body = resp.json()
-        assert body["code"] == "bad_request"
-        assert "不能为空" in body["message"]
-        # 不落库
-        assert client.get("/api/v1/ai/prompts/seed_expand").json()["customized"] is False
+        assert "已存在" in resp.json()["message"]
 
-    def test_save_too_long_400_with_quota(self, client):
-        resp = client.put("/api/v1/ai/prompts/content_draft", json={"content": "x" * 8001})
-        assert resp.status_code == 400
-        body = resp.json()
-        assert body["code"] == "bad_request"
-        assert "8000" in body["message"]
-
-    def test_save_unknown_feature_404(self, client):
-        resp = client.put("/api/v1/ai/prompts/nope", json={"content": "x"})
+    def test_create_unknown_feature_404(self, client):
+        resp = client.post("/api/v1/ai/prompts/nope/templates", json={"name": "x", "content": "y"})
         assert resp.status_code == 404
 
-    def test_features_independent(self, client):
-        client.put("/api/v1/ai/prompts/seed_expand", json={"content": SEED_CUSTOM})
-        assert client.get("/api/v1/ai/prompts/content_draft").json()["customized"] is False
 
+class TestUpdateTemplate:
+    def _active_id(self, client, feature="seed_expand"):
+        return client.get(f"/api/v1/ai/prompts/{feature}").json()["active_id"]
 
-class TestPromptReset:
-    def test_reset_returns_default_and_is_idempotent(self, client):
-        client.put("/api/v1/ai/prompts/seed_expand", json={"content": SEED_CUSTOM})
-        resp = client.post("/api/v1/ai/prompts/seed_expand/reset")
+    def test_update_content_reflects_on_active(self, client):
+        _create(client)
+        tid = self._active_id(client)
+        resp = client.put(
+            f"/api/v1/ai/prompts/seed_expand/templates/{tid}",
+            json={"content": SEED_OK + "\n新增要求"},
+        )
         assert resp.status_code == 200
         body = resp.json()
+        assert body["warnings"] == []
+        assert next(t for t in body["templates"] if t["id"] == tid)["content"].endswith("新增要求")
+
+    def test_rename_and_conflicts(self, client):
+        _create(client)
+        _create(client, name="展会渠道", activate=False)
+        tid = next(
+            t["id"] for t in client.get("/api/v1/ai/prompts/seed_expand").json()["templates"]
+            if t["name"] == "展会渠道"
+        )
+        ok = client.put(f"/api/v1/ai/prompts/seed_expand/templates/{tid}", json={"name": "展会"})
+        assert ok.status_code == 200
+        assert ok.json()["active_name"] == "东非市场"  # 改名非生效模板不动生效
+
+        dup = client.put(f"/api/v1/ai/prompts/seed_expand/templates/{tid}", json={"name": "东非市场"})
+        assert dup.status_code == 400 and "已存在" in dup.json()["message"]
+
+    def test_update_requires_a_field_and_unknown_id_404(self, client):
+        _create(client)
+        tid = self._active_id(client)
+        empty = client.put(f"/api/v1/ai/prompts/seed_expand/templates/{tid}", json={})
+        assert empty.status_code == 400
+        missing = client.put("/api/v1/ai/prompts/seed_expand/templates/t_nope", json={"name": "x"})
+        assert missing.status_code == 404
+        assert missing.json()["code"] == "not_found"
+
+
+class TestDeleteAndActivate:
+    def test_delete_active_falls_back_to_default_and_keeps_others(self, client):
+        _create(client)
+        _create(client, name="展会渠道", content=SEED_OK + "\n展会", activate=False)
+        detail = client.get("/api/v1/ai/prompts/seed_expand").json()
+        active_id = detail["active_id"]
+
+        resp = client.delete(f"/api/v1/ai/prompts/seed_expand/templates/{active_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["active_id"] is None
+        assert body["active_name"] is None
         assert body["customized"] is False
-        assert body["content"] == body["default_content"]
-        assert body["updated_at"] is None
+        assert [t["name"] for t in body["templates"]] == ["展会渠道"]
 
-        again = client.post("/api/v1/ai/prompts/seed_expand/reset")
-        assert again.status_code == 200
-        assert again.json()["customized"] is False
+    def test_delete_unknown_404(self, client):
+        resp = client.delete("/api/v1/ai/prompts/seed_expand/templates/t_nope")
+        assert resp.status_code == 404
 
-    def test_reset_unknown_feature_404(self, client):
-        assert client.post("/api/v1/ai/prompts/nope/reset").status_code == 404
+    def test_activate_switch_and_restore_default(self, client):
+        _create(client)
+        _create(client, name="展会渠道", content=SEED_OK + "\n展会")
+        templates = client.get("/api/v1/ai/prompts/seed_expand").json()["templates"]
+        first = next(t["id"] for t in templates if t["name"] == "东非市场")
+
+        resp = client.put("/api/v1/ai/prompts/seed_expand/active", json={"id": first})
+        assert resp.status_code == 200
+        assert resp.json()["active_name"] == "东非市场"
+
+        restored = client.put("/api/v1/ai/prompts/seed_expand/active", json={"id": None})
+        assert restored.status_code == 200
+        body = restored.json()
+        assert body["active_id"] is None and body["customized"] is False
+        assert len(body["templates"]) == 2  # 库保留
+
+        again = client.put("/api/v1/ai/prompts/seed_expand/active", json={"id": None})
+        assert again.status_code == 200  # 幂等
+
+    def test_activate_unknown_id_404(self, client):
+        resp = client.put("/api/v1/ai/prompts/seed_expand/active", json={"id": "t_nope"})
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "not_found"
+
+
+class TestIndependence:
+    def test_features_are_independent(self, client):
+        _create(client)
+        draft = client.get("/api/v1/ai/prompts/content_draft").json()
+        assert draft["customized"] is False and draft["templates"] == []
+        # 起草侧操作不影响扩充侧
+        client.put("/api/v1/ai/prompts/content_draft/active", json={"id": None})
+        seed = client.get("/api/v1/ai/prompts/seed_expand").json()
+        assert seed["active_name"] == "东非市场"

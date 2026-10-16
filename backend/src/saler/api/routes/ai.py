@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from saler.api.deps import get_session
 from saler.api.errors import bad_request, not_found
-from saler.api.serializers import iso, llm_call_to_dict
+from saler.api.serializers import llm_call_to_dict
 from saler.core.content.ai import run_content_draft, run_content_translate
 from saler.core.errors import ValidationFailed
 from saler.core.llm_utils import resolve_llm_provider
@@ -159,7 +159,7 @@ async def content_translate(
     return {"job_id": job_id}
 
 
-# ---------- 提示词模板（006 契约 §1~§4） ----------
+# ---------- 提示词模板库（006 契约 §1~§4；模板库版） ----------
 
 
 def _require_feature(feature: str):
@@ -170,17 +170,28 @@ def _require_feature(feature: str):
 
 
 def _prompt_detail(db: Session, spec) -> dict:
-    content, customized = store.get_effective(db, spec.key)
-    row = store.get_row(db, spec.key) if customized else None
+    templates, active_id = store.list_templates(db, spec.key)
+    active = next((item for item in templates if item["id"] == active_id), None)
     reserved = registry.RESERVED_OUTPUT_CONTRACT
     return {
         "feature": spec.key,
         "label": spec.label,
-        "content": content,
         "default_content": spec.default_template,
-        "customized": customized,
-        "updated_at": iso(row.updated_at) if row is not None else None,
+        "active_id": active["id"] if active is not None else None,
+        "active_name": active["name"] if active is not None else None,
+        "customized": active is not None,
         "max_length": registry.MAX_TEMPLATE_LENGTH,
+        "max_name_length": store.NAME_MAX_LENGTH,
+        "max_templates": store.MAX_TEMPLATES,
+        "templates": [
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "content": item["content"],
+                "updated_at": item["updated_at"],
+            }
+            for item in templates
+        ],
         "variables": [
             {"name": var.name, "label": var.label, "render": var.render} for var in spec.variables
         ],
@@ -191,19 +202,27 @@ def _prompt_detail(db: Session, spec) -> dict:
     }
 
 
+def _detail_with_warnings(db: Session, spec, warnings: list[dict]) -> dict:
+    detail = _prompt_detail(db, spec)
+    detail["warnings"] = warnings
+    return detail
+
+
 @router.get("/prompts")
 def list_prompts(db: Session = Depends(get_session)) -> dict:
     items = []
     for key in registry.FEATURES:
         spec = registry.FEATURES[key]
-        _, customized = store.get_effective(db, key)
-        row = store.get_row(db, key) if customized else None
+        templates, active_id = store.list_templates(db, key)
+        active = next((item for item in templates if item["id"] == active_id), None)
         items.append(
             {
                 "feature": key,
                 "label": spec.label,
-                "customized": customized,
-                "updated_at": iso(row.updated_at) if row is not None else None,
+                "customized": active is not None,
+                "active_id": active["id"] if active is not None else None,
+                "active_name": active["name"] if active is not None else None,
+                "template_count": len(templates),
             }
         )
     return {"items": items}
@@ -214,25 +233,71 @@ def get_prompt(feature: str, db: Session = Depends(get_session)) -> dict:
     return _prompt_detail(db, _require_feature(feature))
 
 
-class PromptSaveRequest(BaseModel):
+class PromptTemplateCreateRequest(BaseModel):
+    name: str
     content: str
+    activate: bool = True
 
 
-@router.put("/prompts/{feature}")
-def save_prompt(feature: str, payload: PromptSaveRequest, db: Session = Depends(get_session)) -> dict:
-    """保存模板：空/超长 → 400（contract §3）；未知变量等警告不阻断、随响应返回。"""
+class PromptTemplateUpdateRequest(BaseModel):
+    name: str | None = None
+    content: str | None = None
+
+
+class PromptActivateRequest(BaseModel):
+    id: str | None = None
+
+
+@router.post("/prompts/{feature}/templates", status_code=201)
+def create_prompt_template(
+    feature: str, payload: PromptTemplateCreateRequest, db: Session = Depends(get_session)
+) -> dict:
+    """创建/另存为：名称/容量/内容规则违规 → 400；warnings 不阻断、随详情返回（契约 §3a）。"""
     spec = _require_feature(feature)
     try:
-        warnings = store.save(db, spec.key, payload.content)
+        warnings = store.create(
+            db, spec.key, name=payload.name, content=payload.content, activate=payload.activate
+        )
     except ValidationFailed as exc:
         raise bad_request(str(exc)) from exc
-    detail = _prompt_detail(db, spec)
-    detail["warnings"] = warnings
-    return detail
+    return _detail_with_warnings(db, spec, warnings)
 
 
-@router.post("/prompts/{feature}/reset")
-def reset_prompt(feature: str, db: Session = Depends(get_session)) -> dict:
+@router.put("/prompts/{feature}/templates/{template_id}")
+def update_prompt_template(
+    feature: str,
+    template_id: str,
+    payload: PromptTemplateUpdateRequest,
+    db: Session = Depends(get_session),
+) -> dict:
+    """更新内容 / 重命名（契约 §3b）；未知 id → 404，规则违规 → 400。"""
     spec = _require_feature(feature)
-    store.reset(db, spec.key)
+    if payload.name is None and payload.content is None:
+        raise bad_request("至少提供 name 或 content 之一")
+    try:
+        warnings = store.update(
+            db, spec.key, template_id, name=payload.name, content=payload.content
+        )
+    except ValidationFailed as exc:
+        raise bad_request(str(exc)) from exc
+    return _detail_with_warnings(db, spec, warnings)
+
+
+@router.delete("/prompts/{feature}/templates/{template_id}")
+def delete_prompt_template(
+    feature: str, template_id: str, db: Session = Depends(get_session)
+) -> dict:
+    """删除模板（契约 §3c）：删除生效模板由服务端自动回退内置默认。"""
+    spec = _require_feature(feature)
+    store.delete(db, spec.key, template_id)
+    return _prompt_detail(db, spec)
+
+
+@router.put("/prompts/{feature}/active")
+def activate_prompt_template(
+    feature: str, payload: PromptActivateRequest, db: Session = Depends(get_session)
+) -> dict:
+    """切换生效 / 恢复默认（契约 §4）：id=None 即切回内置默认（模板库保留）。"""
+    spec = _require_feature(feature)
+    store.activate(db, spec.key, payload.id)
     return _prompt_detail(db, spec)

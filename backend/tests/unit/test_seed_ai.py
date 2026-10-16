@@ -94,10 +94,12 @@ async def test_expansion_uses_customized_template_with_variables(session_factory
     from saler.core.prompts import registry, store
 
     with session_factory() as db:
-        store.save(
+        store.create(
             db,
             "seed_expand",
-            "自定义角色指令。\n{description}\n{existing_nodes}\n{output_contract}\n请产出约 {count} 条。",
+            name="自定义",
+            content="自定义角色指令。\n{description}\n{existing_nodes}\n{output_contract}\n请产出约 {count} 条。",
+            activate=True,
         )
 
     provider = FakeLLMProvider()

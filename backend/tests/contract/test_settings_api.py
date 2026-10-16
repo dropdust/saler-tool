@@ -1,5 +1,6 @@
 """T153 契约测试（002-frontend-theme）：ui_theme 设置键——默认/写入/值域拒绝/读取归一。
-T280 扩展（006）：delete_value 幂等 + 通用 PUT 拒绝 prompt_template_* 键（域校验守卫）。
+T280 扩展（006）：通用 PUT 拒绝 prompt_template* 键（域校验守卫；模板库存取层自 T297 起自带）。
+T297 修订：delete_value 随模板库改造移除（恢复默认=切换生效而非删行），对应用例删除。
 
 对应 FR-005/006（偏好记忆与回退）与 contracts/theme-contract.md §1：
 - 无行时 GET 返回默认 "light"；
@@ -60,25 +61,14 @@ class TestPromptTemplateKeyGuard:
         assert "AI 提示词" in body["message"]
 
     def test_generic_put_rejects_even_after_row_exists(self, client, db):
-        # 行存在后 is_known_key 会放行——守卫必须先于它（防脏形状写入）
-        settings_service.set_value(db, "prompt_template_content_draft", {"content": "x"})
+        # 行存在后 is_known_key 会放行——守卫必须先于它（防脏形状写入；复数键同样命中前缀）
+        settings_service.set_value(db, "prompt_templates_content_draft", {"active_id": None, "items": []})
         resp = client.put(
-            "/api/v1/settings", json={"values": {"prompt_template_content_draft": {"content": "y"}}}
+            "/api/v1/settings",
+            json={"values": {"prompt_templates_content_draft": {"active_id": None, "items": []}}},
         )
         assert resp.status_code == 400
-        assert db.get(AppSetting, "prompt_template_content_draft").value == {"content": "x"}
-
-
-class TestDeleteValue:
-    """T280（006）：delete_value——删行且幂等（恢复默认 = 删行，行存在即"已自定义"）。"""
-
-    def test_delete_value_removes_row_and_is_idempotent(self, db):
-        settings_service.set_value(db, "prompt_template_seed_expand", {"content": "x"})
-        assert db.get(AppSetting, "prompt_template_seed_expand") is not None
-
-        settings_service.delete_value(db, "prompt_template_seed_expand")
-        assert db.get(AppSetting, "prompt_template_seed_expand") is None
-
-        # 再次删除：幂等，无异常
-        settings_service.delete_value(db, "prompt_template_seed_expand")
-        assert db.get(AppSetting, "prompt_template_seed_expand") is None
+        assert db.get(AppSetting, "prompt_templates_content_draft").value == {
+            "active_id": None,
+            "items": [],
+        }
