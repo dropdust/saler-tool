@@ -89,6 +89,45 @@ async def test_expansion_provider_error_propagates(session_factory):
         await run_expansion(_Ctx(), session_factory, provider, payload={})
 
 
+async def test_expansion_uses_customized_template_with_variables(session_factory):
+    """T284：运行开始读取有效模板并组合——自定义文本 + 变量替换 + 固定段在位。"""
+    from saler.core.prompts import registry, store
+
+    with session_factory() as db:
+        store.save(
+            db,
+            "seed_expand",
+            "自定义角色指令。\n{description}\n{existing_nodes}\n{output_contract}\n请产出约 {count} 条。",
+        )
+
+    provider = FakeLLMProvider()
+    await run_expansion(
+        _Ctx(), session_factory, provider, payload={"description": "紧固件出口", "count": 6}
+    )
+
+    prompt = provider.calls[0]["prompt"]
+    assert prompt.startswith("自定义角色指令。")
+    assert "业务描述：紧固件出口" in prompt
+    assert "请产出约 6 条。" in prompt
+    assert registry.get_feature("seed_expand").output_contract in prompt
+    assert "{description}" not in prompt and "{count}" not in prompt and "{existing_nodes}" not in prompt
+
+
+async def test_expansion_default_path_composes_registry_default(session_factory):
+    """T284：未自定义 → 有效模板 = 注册表默认（组合经 run 管线；逐字等价由 golden 单测锁定）。"""
+    from saler.core.prompts import registry
+
+    provider = FakeLLMProvider()
+    await run_expansion(_Ctx(), session_factory, provider, payload={"description": "X", "count": 8})
+
+    expected = registry.compose(
+        "seed_expand",
+        registry.get_feature("seed_expand").default_template,
+        {"description": "X", "existing_nodes": {}, "count": 8},
+    )
+    assert provider.calls[0]["prompt"] == expected
+
+
 async def test_translate_seeds_creates_pending_variants_with_glossary(session_factory):
     with session_factory() as db:
         product_line = graph_service.create_node(db, node_type="product_line", name="金具")

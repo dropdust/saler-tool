@@ -2,7 +2,9 @@
 
 - 种子一律产出**中文母版**（lang=zh）：语言不由模型决定，审核通过后再经
   `ai_translate.run_translate_seeds` 翻译为目标语言版本（FR-012②）；
-- 全部产出以 `source=llm`、`review_status=pending` 落库（必须人工审核后进入执行队列）。
+- 全部产出以 `source=llm`、`review_status=pending` 落库（必须人工审核后进入执行队列）；
+- 提示词（006）：运行开始时读取有效模板（设置覆盖 or 注册表默认）经
+  `core/prompts.registry.compose` 组合——默认路径与 005 前硬编码逐字等价（golden 锁定）。
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from saler.core.errors import Duplicate, ValidationFailed
 from saler.core.graph import service as graph_service
+from saler.core.prompts import registry, store
 from saler.core.seeds import service as seed_service
 from saler.db.models import GraphNode, Seed
 from saler.jobs.engine import JobContext
@@ -30,40 +33,6 @@ NODE_TYPE_LABELS = {
 
 #: 扩充候选种子的固定语言：中文母版（翻译为目标语言是审核后的独立步骤，FR-012②）
 MASTER_LANG = "zh"
-
-
-def build_expansion_prompt(
-    *,
-    description: str | None,
-    node_names_by_type: dict[str, list[str]],
-    count: int,
-) -> str:
-    parts = [
-        "你是 B2B 外贸获客的市场调研助手。请基于你的知识图谱能力，"
-        "为下列业务扩张目标市场的『爬虫种子』（检索意图）与具名机构实体。",
-    ]
-    if description:
-        parts.append(f"业务描述：{description.strip()}")
-    for node_type in ("product_line", "persona", "market"):
-        names = node_names_by_type.get(node_type, [])
-        if names:
-            parts.append(f"已有{NODE_TYPE_LABELS[node_type]}：{'、'.join(names[:80])}")
-    parts.append(
-        "输出 JSON，结构：\n"
-        "- nodes[]: {node_type: product_line|persona|market|org, name, attributes(对象), "
-        "confidence(0-1), rationale}\n"
-        "- edges[]: {from(节点名), to(节点名), relation_type: product_fit_persona|"
-        "product_target_market|org_in_market|org_has_persona}\n"
-        "- seeds[]: {query(中文检索意图), product_line(节点名,可选), persona(节点名,可选), "
-        "market(节点名,可选), priority(1-3), rationale}\n"
-        f"要求：seeds 约 {count} 条，query 一律为中文母版表述（如「电力金具 电气承包 肯尼亚」），"
-        "表达检索意图即可，勿堆砌英文关键词；"
-        "具名机构实体的 query 为「\"机构名\" 联系方式」形式，机构名保留原文、不翻译；"
-        "org 优先列举真实存在的买方组织（各国电网公司、输配电运营商、EPC 总包、"
-        "电气/紧固件经销商、展会与行业协会等）。"
-        "中文母版经人工审核后由系统翻译为各目标语言版本。"
-    )
-    return "\n".join(parts)
 
 
 async def run_expansion(
@@ -93,9 +62,13 @@ async def run_expansion(
             for row in rows:
                 if row.name not in names_by_type[node_type]:
                     names_by_type[node_type].append(row.name)
+        # 006：运行开始时定格有效模板（其后编辑只影响下一次运行；FR-007）
+        template, _customized = store.get_effective(db, "seed_expand")
 
-    prompt = build_expansion_prompt(
-        description=description, node_names_by_type=names_by_type, count=count
+    prompt = registry.compose(
+        "seed_expand",
+        template,
+        {"description": description, "existing_nodes": names_by_type, "count": count},
     )
     ctx.progress(phase="calling_llm")
     ctx.log("调用大模型进行知识图谱扩充（结果将进入待审核）…")
