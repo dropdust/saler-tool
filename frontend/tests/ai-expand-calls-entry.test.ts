@@ -2,6 +2,7 @@
  * T269/T271 迁移（T239）：AI 扩充对话框改由任务中心 store 驱动（register/waitFor + SSE），
  * 保留原行为——任务完成（成功或失败）后「查看调用明细」入口按 job_id 打开 T267 明细抽屉、
  * 不关闭对话框；调用中「已等待」时长随 1s tick 可见。
+ * T286（006）：提示词入口 + 默认/已自定义徽标 + 以 seed_expand 打开编辑器 + 保存后徽标刷新。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,9 +20,10 @@ vi.mock('../src/api/client', () => ({
 }))
 
 import { api } from '../src/api/client'
-import type { JobPayload } from '../src/api/types'
+import type { JobPayload, PromptTemplateDetail } from '../src/api/types'
 import { useJobCenterStore } from '../src/stores/jobCenter'
 import AiExpandDialog from '../src/views/seeds/AiExpandDialog.vue'
+import PromptEditorDialog from '../src/components/common/PromptEditorDialog.vue'
 
 const get = vi.mocked(api.get)
 const post = vi.mocked(api.post)
@@ -190,6 +192,106 @@ describe('AiExpandDialog · 查看调用明细入口（T269，store 驱动）', 
     FakeEventSource.find('/jobs/7/events').emit('error', { code: 'job_failed', message: '任务失败' })
     await flushPromises()
     expect(document.body.querySelector('[data-test="expand-view-calls"]')).not.toBeNull()
+  })
+})
+
+describe('AiExpandDialog · 提示词入口（T286，006）', () => {
+  function promptDetail(): PromptTemplateDetail {
+    return {
+      feature: 'seed_expand',
+      label: 'AI 扩充（种子扩充）',
+      content: '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n约 {count} 条。',
+      default_content: '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n约 {count} 条。',
+      customized: false,
+      updated_at: null,
+      max_length: 8000,
+      variables: [
+        { name: 'description', label: '业务描述', render: '有值 →「业务描述：…」' },
+        { name: 'existing_nodes', label: '已有节点名单', render: '逐行' },
+        { name: 'count', label: '候选数量', render: '纯数字' },
+      ],
+      reserved_variables: [
+        { name: 'output_contract', label: '输出结构槽位', render: '替换为固定段原文' },
+      ],
+      output_contract: '输出 JSON，结构：…',
+    }
+  }
+
+  function mockPromptApis(customized: boolean) {
+    get.mockImplementation((path: string) => {
+      if (path === '/graph/nodes') {
+        return Promise.resolve({ items: [], total: 0, page: 1, page_size: 500 })
+      }
+      if (path === '/ai/prompts') {
+        return Promise.resolve({
+          items: [
+            { feature: 'seed_expand', label: 'AI 扩充（种子扩充）', customized, updated_at: null },
+            { feature: 'content_draft', label: 'AI 起草（内容母版）', customized: false, updated_at: null },
+          ],
+        })
+      }
+      if (path === '/ai/prompts/seed_expand') return Promise.resolve(promptDetail())
+      return Promise.reject(new Error(`unexpected path ${path}`))
+    })
+  }
+
+  function entry(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>('[data-test="expand-prompt-entry"]')
+  }
+
+  it('表单态出现入口与「默认」徽标', async () => {
+    mockPromptApis(false)
+    await openDialog(pinia)
+    expect(entry()).not.toBeNull()
+    expect(entry()!.textContent).toContain('提示词')
+    expect(entry()!.textContent).toContain('默认')
+  })
+
+  it('已自定义状态徽标', async () => {
+    mockPromptApis(true)
+    await openDialog(pinia)
+    expect(entry()!.textContent).toContain('已自定义')
+  })
+
+  it('点击入口以 seed_expand 打开编辑器', async () => {
+    mockPromptApis(false)
+    await openDialog(pinia)
+    entry()!.click()
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith('/ai/prompts/seed_expand')
+    expect(document.body.textContent).toContain('AI 提示词 · AI 扩充（种子扩充）')
+  })
+
+  it('编辑器 changed 回调后徽标刷新（默认 → 已自定义）', async () => {
+    mockPromptApis(false)
+    const wrapper = await openDialog(pinia)
+    entry()!.click()
+    await flushPromises()
+    mockPromptApis(true) // 保存后服务端状态切换
+    wrapper.findComponent(PromptEditorDialog).vm.$emit('changed', 'seed_expand')
+    await flushPromises()
+    expect(entry()!.textContent).toContain('已自定义')
+  })
+
+  it('进行中面板态（panelMode）不出现入口', async () => {
+    mockPromptApis(false)
+    const store = useJobCenterStore()
+    store.activeJobs[9] = jobPayload({ id: 9, status: 'running', result: null })
+    const wrapper = mount(AiExpandDialog, {
+      global: {
+        plugins: [
+          pinia,
+          ElementPlus,
+          createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] }),
+          i18n,
+        ],
+      },
+      attachTo: document.body,
+    })
+    await (wrapper.vm as unknown as { open: () => Promise<void> }).open()
+    await flushPromises()
+    expect(document.body.textContent).toContain('关闭本窗口不会中断任务')
+    expect(entry()).toBeNull()
   })
 })
 

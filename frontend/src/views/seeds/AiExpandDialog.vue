@@ -61,6 +61,15 @@
     />
     <template #footer>
       <el-button @click="visible = false">关闭</el-button>
+      <el-button v-if="!panelMode" data-test="expand-prompt-entry" @click="openPrompts">
+        提示词<el-tag
+          v-if="promptCustomized !== null"
+          class="prompt-badge"
+          size="small"
+          :type="promptCustomized ? 'warning' : 'info'"
+          data-test="expand-prompt-badge"
+        >{{ promptCustomized ? '已自定义' : '默认' }}</el-tag>
+      </el-button>
       <el-button
         v-if="finishedJobId"
         data-test="expand-view-calls"
@@ -75,6 +84,9 @@
 
   <!-- 本次任务的模型调用入参/出参（T267 抽屉；append-to-body 叠在对话框上） -->
   <LlmCallsDrawer ref="callsDrawer" />
+
+  <!-- 提示词编辑器（006 T286；append-to-body 叠在对话框上） -->
+  <PromptEditorDialog ref="promptEditor" @changed="loadPromptBadge" />
 </template>
 
 <script setup lang="ts">
@@ -82,8 +94,10 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
+import { getPromptList } from '../../api/prompts'
 import JobRunPanel from '../../components/common/JobRunPanel.vue'
 import LlmCallsDrawer from '../../components/common/LlmCallsDrawer.vue'
+import PromptEditorDialog from '../../components/common/PromptEditorDialog.vue'
 import type { GraphNode, JobPayload, Paginated } from '../../api/types'
 import { NODE_TYPE_LABELS } from '../../constants'
 import { TERMINAL_STATUSES } from '../../api/jobs'
@@ -103,6 +117,9 @@ const panelMode = ref(false)
 const currentJobId = ref<number | null>(null)
 const doneHandled = ref(false)
 const callsDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
+const promptEditor = ref<InstanceType<typeof PromptEditorDialog> | null>(null)
+/** 提示词状态徽标（null=未知：列表未取到时不显示；FR-002 透明状态） */
+const promptCustomized = ref<boolean | null>(null)
 const router = useRouter()
 const form = ref({
   description: '',
@@ -123,10 +140,26 @@ async function open() {
   currentJobId.value = active?.id ?? null
   doneHandled.value = false
   visible.value = true
+  void loadPromptBadge()
   if (!nodes.value.length) {
     const page = await api.get<Paginated<GraphNode>>('/graph/nodes', { page_size: 500 })
     nodes.value = page.items.filter((node) => node.status === 'active')
   }
+}
+
+/** 徽标非关键路径：取不到（旧服务/网络抖动）则不显示，不打断对话框 */
+async function loadPromptBadge() {
+  try {
+    const { items } = await getPromptList()
+    promptCustomized.value = items.find((item) => item.feature === 'seed_expand')?.customized ?? null
+  } catch {
+    promptCustomized.value = null
+  }
+}
+
+/** 打开提示词编辑器（006 FR-002：对话框内直达，≤3 次操作完成一次保存） */
+function openPrompts() {
+  promptEditor.value?.open('seed_expand')
 }
 
 function reset() {
@@ -236,5 +269,8 @@ defineExpose({ open })
 }
 .summary {
   margin-top: 12px;
+}
+.prompt-badge {
+  margin-left: 4px;
 }
 </style>

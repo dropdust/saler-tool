@@ -74,7 +74,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 ### Implementation for User Story 1
 
-- [ ] T286 [US1] 扩充对话框接入入口（红→绿，依赖 T285）：`frontend/src/views/seeds/AiExpandDialog.vue` 增「提示词」入口（表单态可见；旁挂「默认/已自定义」徽标，打开对话框时经 `getPromptList` 取数）+ 挂载 `PromptEditorDialog`（feature=`seed_expand`，append-to-body 叠层）；保存/恢复后徽标即时刷新；扩展 `frontend/tests/ai-expand-calls-entry.test.ts`——入口出现、徽标两态、点击以正确 feature 打开编辑器、编辑器保存回调刷新徽标（FR-002、contract §8）→ **红→绿**
+- [X] T286 [US1] 扩充对话框接入入口（红→绿，依赖 T285）：`frontend/src/views/seeds/AiExpandDialog.vue` 增「提示词」入口（表单态可见；旁挂「默认/已自定义」徽标，打开对话框时经 `getPromptList` 取数）+ 挂载 `PromptEditorDialog`（feature=`seed_expand`，append-to-body 叠层）；保存/恢复后徽标即时刷新；扩展 `frontend/tests/ai-expand-calls-entry.test.ts`——入口出现、徽标两态、点击以正确 feature 打开编辑器、编辑器保存回调刷新徽标（FR-002、contract §8）→ **红→绿**（2026-10-16 实作：5 项红→绿（含 panelMode 无入口、徽标取数失败不显示不打断）；全量 207 passed + lint + vue-tsc clean）
 
 - [ ] T287 [US1] 验收（quickstart V1 + V4）：按 [quickstart.md](quickstart.md) 执行——编辑器全要素核对、≤3 操作保存、扩充运行后明细逐项核对（自定义文本/变量替换/固定段/系统消息）、产出体现指令、恢复默认还原、边界抽查（空/超长/未知变量/缺变量/缺槽位兜底）、运行中修改不影响在途运行；不自定义路径执行 V4 默认等价；结论勾注（SC-001~004、FR-001~008）→ 回填验收结论
 
