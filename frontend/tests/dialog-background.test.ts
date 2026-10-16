@@ -20,7 +20,7 @@ vi.mock('../src/api/client', () => ({
 }))
 
 import { api } from '../src/api/client'
-import type { JobPayload } from '../src/api/types'
+import type { JobPayload, PromptTemplateDetail } from '../src/api/types'
 import { useJobCenterStore } from '../src/stores/jobCenter'
 import JobRunPanel from '../src/components/common/JobRunPanel.vue'
 import AiExpandDialog from '../src/views/seeds/AiExpandDialog.vue'
@@ -437,5 +437,150 @@ describe('AiContentDialog · 两动作重开（T241）', () => {
 
     expect(document.body.querySelector('[data-test="job-run-panel"]')).not.toBeNull()
     expect(findButton('开始生成')).toBeUndefined()
+  })
+})
+
+describe('AiContentDialog · 提示词入口（T289，006 模板库）', () => {
+  function mountContent(pinia: Pinia, router: Router): VueWrapper {
+    return mount(AiContentDialog, {
+      global: { plugins: [pinia, ElementPlus, router, i18n] },
+      attachTo: document.body,
+    })
+  }
+
+  function contentPromptDetail(): PromptTemplateDetail {
+    return {
+      feature: 'content_draft',
+      label: 'AI 起草（内容母版）',
+      default_content: '你是文案专家。\n{brief}\n{tone}\n{output_contract}',
+      active_id: null,
+      active_name: null,
+      customized: false,
+      max_length: 8000,
+      max_name_length: 60,
+      max_templates: 50,
+      templates: [],
+      variables: [
+        { name: 'brief', label: '业务要点', render: '「业务要点：…」' },
+        { name: 'tone', label: '语气', render: '「语气：…。」' },
+        { name: 'content_type', label: '内容类型', render: '纯值' },
+        { name: 'language', label: '语言', render: '纯值' },
+      ],
+      reserved_variables: [
+        { name: 'output_contract', label: '输出结构槽位', render: '替换为固定段原文' },
+      ],
+      output_contract: '输出 JSON：{"subject": …, "body_md": …}。',
+    }
+  }
+
+  function mockPromptList(responder: () => Promise<unknown>) {
+    mockedApi.get.mockImplementation((path: string) => {
+      if (path === '/ai/prompts') return responder()
+      if (path === '/ai/prompts/content_draft') return Promise.resolve(contentPromptDetail())
+      if (path === '/llm/providers') return Promise.resolve([{ id: 1, name: 'on' }])
+      return Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 })
+    })
+  }
+
+  function summary(customized: boolean, activeName: string | null) {
+    return () =>
+      Promise.resolve({
+        items: [
+          {
+            feature: 'content_draft',
+            label: 'AI 起草（内容母版）',
+            customized,
+            active_id: customized ? 't1' : null,
+            active_name: activeName,
+            template_count: customized ? 1 : 0,
+          },
+          {
+            feature: 'seed_expand',
+            label: 'AI 扩充（种子扩充）',
+            customized: false,
+            active_id: null,
+            active_name: null,
+            template_count: 0,
+          },
+        ],
+      })
+  }
+
+  function entry(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>('[data-test="content-prompt-entry"]')
+  }
+
+  async function openContent(wrapper: VueWrapper) {
+    ;(wrapper.vm as unknown as { open: (t: { id: number; name: string; master_lang: string }) => void }).open(
+      { id: 1, name: '主题A', master_lang: 'zh' },
+    )
+    await flushPromises()
+  }
+
+  it('起草页签：入口出现 + 「默认」徽标', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(summary(false, null))
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    expect(entry()).not.toBeNull()
+    expect(entry()!.textContent).toContain('提示词')
+    expect(entry()!.textContent).toContain('默认')
+  })
+
+  it('已生效具名模板：徽标显示模板名', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(summary(true, '写作规范'))
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    expect(entry()!.textContent).toContain('写作规范')
+  })
+
+  it('取数失败：入口在、徽标不显示', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(() => Promise.reject(new Error('boom')))
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    expect(entry()).not.toBeNull()
+    expect(document.body.querySelector('[data-test="content-prompt-badge"]')).toBeNull()
+  })
+
+  it('点击入口以 content_draft 打开编辑器', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(summary(false, null))
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    entry()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(mockedApi.get).toHaveBeenCalledWith('/ai/prompts/content_draft')
+    expect(document.body.textContent).toContain('AI 提示词 · AI 起草（内容母版）')
+  })
+
+  it('多语言生成页签无入口', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(summary(false, null))
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    expect(entry()).not.toBeNull()
+    const tab = [...document.body.querySelectorAll<HTMLElement>('.el-tabs__item')].find((el) =>
+      el.textContent?.includes('主题级多语言生成'),
+    )!
+    tab.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(entry()).toBeNull()
+  })
+
+  it('起草命中进行中任务（面板态）：无入口', async () => {
+    const { pinia, router } = setup()
+    mockPromptList(summary(false, null))
+    const store = useJobCenterStore()
+    store.activeJobs[21] = jobPayload({
+      id: 21,
+      job_type: 'ai_content_draft',
+      name: 'AI 内容起草',
+    })
+    const wrapper = mountContent(pinia, router)
+    await openContent(wrapper)
+    expect(document.body.querySelector('[data-test="job-run-panel"]')).not.toBeNull()
+    expect(entry()).toBeNull()
   })
 })

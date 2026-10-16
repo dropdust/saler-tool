@@ -78,6 +78,19 @@
 
     <template #footer>
       <el-button @click="visible = false">关闭</el-button>
+      <el-button
+        v-if="tab === 'draft' && !draftPanelMode"
+        data-test="content-prompt-entry"
+        @click="openPrompts"
+      >
+        提示词<el-tag
+          v-if="promptBadge !== null"
+          class="prompt-badge"
+          size="small"
+          :type="promptBadge === '默认' ? 'info' : 'warning'"
+          data-test="content-prompt-badge"
+        >{{ promptBadge }}</el-tag>
+      </el-button>
       <el-button v-if="summary" type="success" plain @click="goTheme">去查看</el-button>
       <el-button
         v-if="tab === 'draft' && !draftPanelMode"
@@ -97,6 +110,9 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <!-- 提示词编辑器（006 T289；append-to-body 叠在对话框上） -->
+  <PromptEditorDialog ref="promptEditor" @changed="loadPromptBadge" />
 </template>
 
 <script setup lang="ts">
@@ -104,9 +120,11 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
+import { getPromptList } from '../../api/prompts'
 import { TERMINAL_STATUSES } from '../../api/jobs'
 import type { JobPayload } from '../../api/types'
 import JobRunPanel from '../../components/common/JobRunPanel.vue'
+import PromptEditorDialog from '../../components/common/PromptEditorDialog.vue'
 import { LANGS, langLabel } from '../../constants'
 import { useJobCenterStore } from '../../stores/jobCenter'
 
@@ -161,6 +179,26 @@ function open(theme: { id: number; name: string; master_lang: string }) {
   translateProgress.value = ''
   tab.value = draftActive ? 'draft' : translateActive ? 'translate' : 'draft'
   visible.value = true
+  void loadPromptBadge()
+}
+
+/** 徽标：默认 / 生效模板名（null=未知不显示；T289 与扩充对话框同口径） */
+const promptBadge = ref<string | null>(null)
+const promptEditor = ref<InstanceType<typeof PromptEditorDialog> | null>(null)
+
+async function loadPromptBadge() {
+  try {
+    const { items } = await getPromptList()
+    const row = items.find((item) => item.feature === 'content_draft')
+    promptBadge.value = row ? (row.customized && row.active_name ? row.active_name : '默认') : null
+  } catch {
+    promptBadge.value = null
+  }
+}
+
+/** 打开提示词编辑器（006 FR-002：起草页签内直达） */
+function openPrompts() {
+  promptEditor.value?.open('content_draft')
 }
 
 function reset() {
@@ -303,5 +341,8 @@ defineExpose({ open })
 }
 .summary {
   margin-top: 12px;
+}
+.prompt-badge {
+  margin-left: 4px;
 }
 </style>

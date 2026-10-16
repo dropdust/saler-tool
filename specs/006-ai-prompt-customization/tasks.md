@@ -100,7 +100,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 - [X] T288 [US2] 起草运行接入组合管线（红→绿，依赖 T279/T281/T297）：`backend/src/saler/core/content/ai.py`——`run_content_draft` 删除 `_build_draft_prompt` 硬编码路径（函数一并删除），改为任务开始时 `store.get_effective(db, "content_draft")`（模板库修订后取生效模板；签名不变）+ `registry.compose`（上下文：`brief`/`tone`（None→缺省渲染）/`content_type`（主题值）/`language`（母版语言））；新建 `backend/tests/unit/test_content_ai.py`——自定义模板生效断言（FakeLLMProvider messages 含自定义文本、`{brief}`→「业务要点：…」、`{tone}` 两态、`{{company_name}}` 原样保留、固定段在位；模板经 `store.create(..., activate=True)` 预置）；默认路径 golden 互验；两功能独立（扩充模板库变更不影响起草运行）→ **红→绿**（2026-10-16 实作：4 项红→绿——自定义模板全变量替换/`{tone}` 两态/默认路径等价/两功能独立；全量 466 passed）
 
-- [ ] T289 [US2] 内容对话框接入入口（红→绿，依赖 T285/T300）：`frontend/src/views/content/AiContentDialog.vue` 起草/润色页签增「提示词」入口 + 徽标（feature=`content_draft`；徽标显示「默认/生效模板名」，同 T300 口径；「主题级多语言生成」页签不加）+ 挂载编辑器；文档范围提示保持既有口径；扩展 `frontend/tests/dialog-background.test.ts`（或按现状归属该对话框的测试文件）——起草页签入口出现、语言生成页签无入口、以正确 feature 打开编辑器、徽标两态 → **红→绿**
+- [X] T289 [US2] 内容对话框接入入口（红→绿，依赖 T285/T300）：`frontend/src/views/content/AiContentDialog.vue` 起草/润色页签增「提示词」入口 + 徽标（feature=`content_draft`；徽标显示「默认/生效模板名」，同 T300 口径；「主题级多语言生成」页签不加）+ 挂载编辑器；文档范围提示保持既有口径；扩展 `frontend/tests/dialog-background.test.ts`（或按现状归属该对话框的测试文件）——起草页签入口出现、语言生成页签无入口、以正确 feature 打开编辑器、徽标两态 → **红→绿**（2026-10-16 实作：6 项红→绿（默认徽标/生效模板名/取数失败不显示/点击以 content_draft 打开/语言页签无入口/面板态无入口）；全量 224 passed + lint + vue-tsc clean）
 
 ### Implementation for User Story 2
 
