@@ -1,7 +1,9 @@
 """AI 内容服务（FR-038）：中文母版辅助编写 + 主题级多语言生成/翻译。
 
 - 以中文母版为源；翻译复用图谱词表术语保持多语言一致；
-- 产出一律 draft（带 source=llm_assisted / llm_translated），人工审核后才发布。
+- 产出一律 draft（带 source=llm_assisted / llm_translated），人工审核后才发布；
+- 起草提示词（006）：运行开始时读取生效模板（模板库 or 注册表默认）经
+  `core/prompts.registry.compose` 组合——默认路径与 005 前硬编码逐字等价（golden 锁定）。
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from saler.core.content import service as content_service
 from saler.core.errors import ValidationFailed
+from saler.core.prompts import registry, store
 from saler.db.models import ContentVariant, GraphNode, NodeTerm
 from saler.jobs.engine import JobContext
 from saler.providers.llm import call_log, telemetry
@@ -32,17 +35,6 @@ def _glossary(db: Session, targets: list[str]) -> dict[str, dict[str, str]]:
         if source:
             out.setdefault(term.lang, {})[source] = term.term
     return out
-
-
-def _build_draft_prompt(*, content_type: str, brief: str, tone: str | None, language: str) -> str:
-    return (
-        f"你是资深外贸销售文案专家。请为下列业务撰写一条{content_type}（语言：{language}）文案。\n"
-        f"业务要点：{brief}\n"
-        f"语气：{tone or '专业、克制、以价值为先'}。\n"
-        '输出 JSON：{"subject": "主题行（如适用）", "body_md": "Markdown 正文"}。\n'
-        "要求：正文可使用 {{company_name}} 之类的变量占位符（收件人维度个性化）；"
-        "不要编造具体价格与交期；落款处使用 {{signature}} 占位。"
-    )
 
 
 def _build_translate_prompt(
@@ -79,8 +71,17 @@ async def run_content_draft(
         theme = content_service.get_theme(db, theme_id)
         master_lang = theme.master_lang
         content_type = theme.content_type
-    prompt = _build_draft_prompt(
-        content_type=content_type, brief=brief, tone=payload.get("tone"), language=master_lang
+        # 006：运行开始时定格生效模板（其后切换/编辑只影响下一次运行；FR-007）
+        template, _customized = store.get_effective(db, "content_draft")
+    prompt = registry.compose(
+        "content_draft",
+        template,
+        {
+            "brief": brief,
+            "tone": payload.get("tone"),
+            "content_type": content_type,
+            "language": master_lang,
+        },
     )
     ctx.progress(phase="calling_llm")
     ctx.log("大模型正在起草中文母版…")
