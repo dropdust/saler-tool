@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from saler.core.errors import ValidationFailed
 from saler.core.prompts import registry
+from saler.db.models import AppSetting
 from saler.services import settings_service
 
 KEY_PREFIX = "prompt_template_"
@@ -19,6 +20,11 @@ KEY_PREFIX = "prompt_template_"
 
 def key_for(feature_key: str) -> str:
     return f"{KEY_PREFIX}{feature_key}"
+
+
+def get_row(db: Session, feature_key: str) -> AppSetting | None:
+    """已自定义行（供 API 层呈现 updated_at）；无行返回 None（宪法 II：路由不直接碰模型）。"""
+    return db.get(AppSetting, key_for(feature_key))
 
 
 def get_effective(db: Session, feature_key: str) -> tuple[str, bool]:

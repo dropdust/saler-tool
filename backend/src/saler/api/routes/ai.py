@@ -1,6 +1,8 @@
-"""AI API：种子扩充 / 翻译（job 化；provider 解析可测试注入）。
+"""AI API：种子扩充 / 翻译（job 化；provider 解析可测试注入）+ 提示词模板（006）。
 
 调用前数据范围可见（FR-031）：请求参数中即为发送给模型的内容（描述 + 节点名等）。
+提示词端点（006 契约 §1~§4）：模板的读取/保存/恢复默认；域校验（空/超长阻断、
+未知变量/缺失变量/缺槽位警告）经 `core/prompts` 单点实现。
 """
 
 from __future__ import annotations
@@ -10,9 +12,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from saler.api.deps import get_session
-from saler.api.serializers import llm_call_to_dict
+from saler.api.errors import bad_request, not_found
+from saler.api.serializers import iso, llm_call_to_dict
 from saler.core.content.ai import run_content_draft, run_content_translate
+from saler.core.errors import ValidationFailed
 from saler.core.llm_utils import resolve_llm_provider
+from saler.core.prompts import registry, store
 from saler.core.seeds.ai import run_expansion
 from saler.core.seeds.ai_translate import run_translate_seeds, run_translate_terms
 from saler.providers.llm import call_log
@@ -152,3 +157,82 @@ async def content_translate(
         ),
     )
     return {"job_id": job_id}
+
+
+# ---------- 提示词模板（006 契约 §1~§4） ----------
+
+
+def _require_feature(feature: str):
+    spec = registry.get_feature(feature)
+    if spec is None:
+        raise not_found("提示词功能")
+    return spec
+
+
+def _prompt_detail(db: Session, spec) -> dict:
+    content, customized = store.get_effective(db, spec.key)
+    row = store.get_row(db, spec.key) if customized else None
+    reserved = registry.RESERVED_OUTPUT_CONTRACT
+    return {
+        "feature": spec.key,
+        "label": spec.label,
+        "content": content,
+        "default_content": spec.default_template,
+        "customized": customized,
+        "updated_at": iso(row.updated_at) if row is not None else None,
+        "max_length": registry.MAX_TEMPLATE_LENGTH,
+        "variables": [
+            {"name": var.name, "label": var.label, "render": var.render} for var in spec.variables
+        ],
+        "reserved_variables": [
+            {"name": reserved.name, "label": reserved.label, "render": reserved.render}
+        ],
+        "output_contract": spec.output_contract,
+    }
+
+
+@router.get("/prompts")
+def list_prompts(db: Session = Depends(get_session)) -> dict:
+    items = []
+    for key in registry.FEATURES:
+        spec = registry.FEATURES[key]
+        _, customized = store.get_effective(db, key)
+        row = store.get_row(db, key) if customized else None
+        items.append(
+            {
+                "feature": key,
+                "label": spec.label,
+                "customized": customized,
+                "updated_at": iso(row.updated_at) if row is not None else None,
+            }
+        )
+    return {"items": items}
+
+
+@router.get("/prompts/{feature}")
+def get_prompt(feature: str, db: Session = Depends(get_session)) -> dict:
+    return _prompt_detail(db, _require_feature(feature))
+
+
+class PromptSaveRequest(BaseModel):
+    content: str
+
+
+@router.put("/prompts/{feature}")
+def save_prompt(feature: str, payload: PromptSaveRequest, db: Session = Depends(get_session)) -> dict:
+    """保存模板：空/超长 → 400（contract §3）；未知变量等警告不阻断、随响应返回。"""
+    spec = _require_feature(feature)
+    try:
+        warnings = store.save(db, spec.key, payload.content)
+    except ValidationFailed as exc:
+        raise bad_request(str(exc)) from exc
+    detail = _prompt_detail(db, spec)
+    detail["warnings"] = warnings
+    return detail
+
+
+@router.post("/prompts/{feature}/reset")
+def reset_prompt(feature: str, db: Session = Depends(get_session)) -> dict:
+    spec = _require_feature(feature)
+    store.reset(db, spec.key)
+    return _prompt_detail(db, spec)
