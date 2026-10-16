@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="`AI 提示词 · ${detail?.label ?? ''}`"
-    width="720px"
+    width="760px"
     :before-close="handleBeforeClose"
     @closed="onClosed"
   >
@@ -13,12 +13,29 @@
           size="small"
           data-test="prompt-status"
         >
-          {{ detail.customized ? '已自定义' : '默认' }}
+          {{ detail.customized ? detail.active_name : '默认' }}
         </el-tag>
-        <span class="hint">模板将随每次运行发送至已配置的大模型服务；修改只影响其后新发起的运行。</span>
+        <span class="hint">模板将随每次运行发送至已配置的大模型服务；切换与修改只影响其后新发起的运行。</span>
       </div>
 
       <el-form label-width="90px" class="editor-form">
+        <el-form-item label="当前模板">
+          <div class="selector-row">
+            <el-select
+              :model-value="selectedId"
+              data-test="prompt-select"
+              style="width: 280px"
+              @change="onSelect"
+            >
+              <el-option value="" label="内置默认（不可修改）" />
+              <el-option v-for="t in detail.templates" :key="t.id" :value="t.id" :label="t.name" />
+            </el-select>
+            <el-button data-test="prompt-save-as" :disabled="busy" @click="onSaveAs">另存为</el-button>
+            <el-button data-test="prompt-rename" :disabled="!isNamed || busy" @click="onRename">重命名</el-button>
+            <el-button data-test="prompt-delete" :disabled="!isNamed || busy" @click="onDelete">删除</el-button>
+          </div>
+        </el-form-item>
+
         <el-form-item label="提示词模板">
           <el-input
             ref="inputRef"
@@ -65,9 +82,9 @@
     <template #footer>
       <el-button data-test="prompt-close" @click="attemptClose">关闭</el-button>
       <el-button
-        data-test="prompt-reset"
+        data-test="prompt-restore-default"
         :disabled="!detail?.customized || busy"
-        @click="onReset"
+        @click="onRestoreDefault"
       >
         恢复默认
       </el-button>
@@ -88,7 +105,13 @@
 import { computed, nextTick, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { InputInstance } from 'element-plus'
-import { getPrompt, resetPrompt, savePrompt } from '../../api/prompts'
+import {
+  activateTemplate,
+  createTemplate,
+  deleteTemplate,
+  getPrompt,
+  updateTemplate,
+} from '../../api/prompts'
 import type { PromptFeatureKey, PromptTemplateDetail, PromptVariable } from '../../api/types'
 
 const emit = defineEmits<{ changed: [feature: PromptFeatureKey] }>()
@@ -100,13 +123,22 @@ const busy = ref(false)
 const feature = ref<PromptFeatureKey>('seed_expand')
 const detail = ref<PromptTemplateDetail | null>(null)
 const content = ref('')
+/** 选择器值：'' = 内置默认；其余为具名模板 id。选择即生效（契约 §8） */
+const selectedId = ref('')
 const inputRef = ref<InputInstance | null>(null)
 
 const allVariables = computed<PromptVariable[]>(() =>
   detail.value ? [...detail.value.variables, ...detail.value.reserved_variables] : [],
 )
+const isNamed = computed(() => selectedId.value !== '')
+const activeItem = computed(
+  () => detail.value?.templates.find((t) => t.id === selectedId.value) ?? null,
+)
+const savedContent = computed(
+  () => activeItem.value?.content ?? detail.value?.default_content ?? '',
+)
+const dirty = computed(() => detail.value !== null && content.value !== savedContent.value)
 const overLimit = computed(() => !!detail.value && content.value.length > detail.value.max_length)
-const dirty = computed(() => detail.value !== null && content.value !== detail.value.content)
 
 async function open(key: PromptFeatureKey) {
   feature.value = key
@@ -114,8 +146,7 @@ async function open(key: PromptFeatureKey) {
   loading.value = true
   detail.value = null
   try {
-    detail.value = await getPrompt(key)
-    content.value = detail.value.content
+    applyDetail(await getPrompt(key))
   } catch {
     /* 统一错误提示已由客户端弹出 */
     visible.value = false
@@ -124,10 +155,21 @@ async function open(key: PromptFeatureKey) {
   }
 }
 
+/** 以服务端详情为准刷新全部状态（生效选择 + 编辑区） */
+function applyDetail(d: PromptTemplateDetail) {
+  detail.value = d
+  selectedId.value = d.active_id ?? ''
+  content.value = d.active_id
+    ? (d.templates.find((t) => t.id === d.active_id)?.content ?? d.default_content)
+    : d.default_content
+}
+
 function onClosed() {
   detail.value = null
   content.value = ''
+  selectedId.value = ''
   saving.value = false
+  busy.value = false
 }
 
 function textareaEl(): HTMLTextAreaElement | null {
@@ -153,7 +195,7 @@ function insertVariable(name: string) {
   })
 }
 
-/** 客户端同规则预检（体验用；服务端 PUT 响应为权威——contract §7） */
+/** 客户端同规则预检（体验用；服务端响应 warnings 为权威——contract §7） */
 const UNKNOWN_RE = /(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})/g
 
 function precheckWarnings(): { code: string; message: string }[] {
@@ -189,16 +231,17 @@ function precheckWarnings(): { code: string; message: string }[] {
   return warnings
 }
 
-async function onSave() {
+/** 内容级前置检查（空/超长/警告确认）；通过返回 true */
+async function passContentChecks(): Promise<boolean> {
   const d = detail.value
-  if (!d || saving.value) return
+  if (!d) return false
   if (!content.value.trim()) {
     ElMessage.warning('提示词不能为空')
-    return
+    return false
   }
   if (content.value.length > d.max_length) {
     ElMessage.warning(`超过长度上限（${content.value.length}/${d.max_length} 字符）`)
-    return
+    return false
   }
   const warnings = precheckWarnings()
   if (warnings.length) {
@@ -209,14 +252,54 @@ async function onSave() {
         { confirmButtonText: '仍要保存', cancelButtonText: '取消', type: 'warning' },
       )
     } catch {
+      return false
+    }
+  }
+  return true
+}
+
+async function doActivate(target: string | null) {
+  busy.value = true
+  try {
+    applyDetail(await activateTemplate(feature.value, target))
+    emit('changed', feature.value)
+  } catch {
+    /* 统一错误提示已由客户端弹出；选择器随 model-value 回退 */
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 选择即生效（契约 §8）：脏状态先确认放弃；取消则选择器回退原值 */
+async function onSelect(id: string) {
+  if (id === selectedId.value || busy.value) return
+  if (dirty.value) {
+    try {
+      await ElMessageBox.confirm('切换模板将丢弃编辑器中的未保存修改。', '放弃未保存的修改？', {
+        confirmButtonText: '放弃并切换',
+        cancelButtonText: '继续编辑',
+        type: 'warning',
+      })
+    } catch {
       return
     }
   }
+  await doActivate(id === '' ? null : id)
+}
+
+async function onSave() {
+  if (!detail.value || saving.value || busy.value) return
+  if (!(await passContentChecks())) return
+  if (!isNamed.value) {
+    // FR-015：内置默认不可改——保存引导另存为
+    await doSaveAs()
+    return
+  }
   saving.value = true
   try {
-    detail.value = await savePrompt(feature.value, content.value)
-    content.value = detail.value.content
-    for (const w of detail.value.warnings ?? []) ElMessage.warning(w.message)
+    const next = await updateTemplate(feature.value, selectedId.value, { content: content.value })
+    applyDetail(next)
+    for (const w of next.warnings ?? []) ElMessage.warning(w.message)
     ElMessage.success('提示词已保存（对下一次运行生效）')
     emit('changed', feature.value)
   } catch {
@@ -226,29 +309,103 @@ async function onSave() {
   }
 }
 
-async function onReset() {
-  const d = detail.value
-  if (!d || !d.customized || busy.value) return
+/** 命名输入（另存为/重命名共用）；取消返回 null */
+async function askName(title: string, initial: string): Promise<string | null> {
   try {
-    await ElMessageBox.confirm(
-      '恢复默认将丢弃当前自定义模板，之后的运行改用内置默认提示词。',
-      '恢复默认？',
-      { confirmButtonText: '恢复默认', cancelButtonText: '取消', type: 'warning' },
-    )
+    const result = await ElMessageBox.prompt('模板名称（同功能内不得重名）', title, {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: initial,
+      inputValidator: (value: string) => (value ?? '').trim() ? true : '名称不能为空',
+    })
+    return String(result.value).trim()
   } catch {
-    return
+    return null
   }
+}
+
+async function doSaveAs() {
+  const d = detail.value
+  if (!d || busy.value) return
+  const name = await askName('另存为新模板', '')
+  if (name === null) return
   busy.value = true
   try {
-    detail.value = await resetPrompt(feature.value)
-    content.value = detail.value.content
-    ElMessage.success('已恢复默认提示词')
+    const next = await createTemplate(feature.value, {
+      name,
+      content: content.value,
+      activate: true,
+    })
+    applyDetail(next)
+    for (const w of next.warnings ?? []) ElMessage.warning(w.message)
+    ElMessage.success(`已创建并启用：${name}`)
     emit('changed', feature.value)
   } catch {
     /* 统一错误提示已由客户端弹出 */
   } finally {
     busy.value = false
   }
+}
+
+async function onSaveAs() {
+  if (!detail.value || busy.value || saving.value) return
+  if (!(await passContentChecks())) return
+  await doSaveAs()
+}
+
+async function onRename() {
+  const d = detail.value
+  if (!d || !isNamed.value || busy.value) return
+  const name = await askName('重命名模板', activeItem.value?.name ?? '')
+  if (name === null || name === activeItem.value?.name) return
+  busy.value = true
+  try {
+    applyDetail(await updateTemplate(feature.value, selectedId.value, { name }))
+    ElMessage.success('已重命名')
+    emit('changed', feature.value)
+  } catch {
+    /* 统一错误提示已由客户端弹出 */
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onDelete() {
+  const d = detail.value
+  if (!d || !isNamed.value || busy.value) return
+  try {
+    await ElMessageBox.confirm(
+      `删除模板「${activeItem.value?.name}」？若它是当前生效模板，将自动回到内置默认。`,
+      '删除模板？',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  busy.value = true
+  try {
+    applyDetail(await deleteTemplate(feature.value, selectedId.value))
+    ElMessage.success('已删除模板')
+    emit('changed', feature.value)
+  } catch {
+    /* 统一错误提示已由客户端弹出 */
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onRestoreDefault() {
+  if (!detail.value?.customized || busy.value) return
+  try {
+    await ElMessageBox.confirm('切回内置默认模板；已保存的自定义模板全部保留。', '恢复默认？', {
+      confirmButtonText: '恢复默认',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  await doActivate(null)
 }
 
 /** 脏状态关闭需确认放弃（X / ESC / 遮罩经 dialog before-close；页脚按钮直接走本函数） */
@@ -288,6 +445,11 @@ defineExpose({ open, visible, content, dirty })
 .hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.selector-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 .counter {
   width: 100%;

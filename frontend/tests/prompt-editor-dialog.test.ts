@@ -1,45 +1,64 @@
 /**
- * T285 PromptEditorDialog（红→绿）：加载渲染/状态徽标/长度计数/变量插入/
- * 保存预检警告确认（取消与继续两路径）/空值阻断/恢复默认/脏关闭确认。
- * 契约：006 contracts/prompt-customization-contract.md §2/§3/§4/§7/§8。
+ * T299 PromptEditorDialog（模板库版，红→绿）：选择器（选择即生效）/另存为/重命名/删除（生效回退）/
+ * 保存（具名=更新；默认态=引导另存为）/预检警告确认/恢复默认（保留库）/脏状态确认。
+ * 契约：006 contracts/prompt-customization-contract.md §2~§4/§7/§8（模板库版）。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus, { ElMessageBox, ElSelect } from 'element-plus'
 
 import { i18n } from '../src/i18n'
 
 vi.mock('../src/api/prompts', () => ({
   getPromptList: vi.fn(),
   getPrompt: vi.fn(),
-  savePrompt: vi.fn(),
-  resetPrompt: vi.fn(),
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+  activateTemplate: vi.fn(),
   assistPrompt: vi.fn(),
 }))
 
-import { getPrompt, resetPrompt, savePrompt } from '../src/api/prompts'
-import type { PromptTemplateDetail } from '../src/api/types'
+import {
+  activateTemplate,
+  createTemplate,
+  deleteTemplate,
+  getPrompt,
+  updateTemplate,
+} from '../src/api/prompts'
+import type { PromptTemplateDetail, PromptTemplateItem } from '../src/api/types'
 import PromptEditorDialog from '../src/components/common/PromptEditorDialog.vue'
 
 const getPromptMock = vi.mocked(getPrompt)
-const savePromptMock = vi.mocked(savePrompt)
-const resetPromptMock = vi.mocked(resetPrompt)
+const createMock = vi.mocked(createTemplate)
+const updateMock = vi.mocked(updateTemplate)
+const deleteMock = vi.mocked(deleteTemplate)
+const activateMock = vi.mocked(activateTemplate)
 
 const DEFAULT =
   '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n要求：约 {count} 条。'
 const CONTRACT = '输出 JSON，结构：{node_type: ...}'
+const TEMPLATE_A = 'A 指令 {description} {existing_nodes} {count} {output_contract}'
+const TEMPLATE_B = 'B 指令 {description} {existing_nodes} {count} {output_contract}'
+
+function item(id: string, name: string, content: string): PromptTemplateItem {
+  return { id, name, content, updated_at: '2026-10-16T00:00:00' }
+}
 
 function detail(overrides: Partial<PromptTemplateDetail> = {}): PromptTemplateDetail {
   return {
     feature: 'seed_expand',
     label: 'AI 扩充（种子扩充）',
-    content: DEFAULT,
     default_content: DEFAULT,
+    active_id: null,
+    active_name: null,
     customized: false,
-    updated_at: null,
     max_length: 8000,
+    max_name_length: 60,
+    max_templates: 50,
+    templates: [],
     variables: [
       { name: 'description', label: '业务描述', render: '有值 →「业务描述：…」' },
       { name: 'existing_nodes', label: '已有节点名单', render: '逐行「已有X：…」' },
@@ -52,6 +71,13 @@ function detail(overrides: Partial<PromptTemplateDetail> = {}): PromptTemplateDe
     ...overrides,
   }
 }
+
+const ACTIVE_A = detail({
+  active_id: 't_a',
+  active_name: '东非市场',
+  customized: true,
+  templates: [item('t_a', '东非市场', TEMPLATE_A), item('t_b', '展会渠道', TEMPLATE_B)],
+})
 
 type Exposed = { open: (feature: string) => void; visible: boolean }
 
@@ -66,7 +92,6 @@ async function mountAndOpen(d: PromptTemplateDetail): Promise<VueWrapper> {
   return wrapper
 }
 
-/** Element Plus 的 el-input 会把透传属性挂到内部 textarea 上（inheritAttrs: false） */
 function textarea(): HTMLTextAreaElement {
   return document.body.querySelector(
     'textarea[data-test="prompt-textarea"]',
@@ -78,7 +103,6 @@ function btn(name: string): HTMLElement {
 }
 
 async function click(name: string) {
-  // MouseEvent：el-button 的 click 事件校验要求鼠标事件（普通 Event 会触发 Vue 告警）
   btn(name).dispatchEvent(new MouseEvent('click', { bubbles: true }))
   await flushPromises()
 }
@@ -87,27 +111,36 @@ async function setTextarea(wrapper: VueWrapper, value: string) {
   await wrapper.find('textarea[data-test="prompt-textarea"]').setValue(value)
 }
 
+/** 通过 ElSelect 组件事件驱动选择器（jsdom 不便展开下拉） */
+async function selectTemplate(wrapper: VueWrapper, id: string) {
+  wrapper.findComponent(ElSelect).vm.$emit('change', id)
+  await flushPromises()
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   document.body.innerHTML = ''
 })
 
 describe('PromptEditorDialog 加载与呈现', () => {
-  it('加载渲染：标题/默认徽标/模板全文/长度计数/固定段只读块/变量面板', async () => {
+  it('默认态：选择器=内置默认、模板全文/计数/固定段/变量面板、状态「默认」', async () => {
     await mountAndOpen(detail())
     expect(getPromptMock).toHaveBeenCalledWith('seed_expand')
-    expect(document.body.textContent).toContain('AI 扩充（种子扩充）')
+    // 下拉未展开时仅选中项渲染标签
+    expect(document.body.textContent).toContain('内置默认')
     expect(btn('prompt-status').textContent).toContain('默认')
     expect(textarea().value).toBe(DEFAULT)
     expect(btn('prompt-counter').textContent).toContain(`${DEFAULT.length} / 8000`)
     expect(btn('prompt-contract').textContent).toBe(CONTRACT)
     expect(btn('prompt-var-count')).toBeTruthy()
-    expect(btn('prompt-var-output_contract')).toBeTruthy()
   })
 
-  it('已自定义状态呈现', async () => {
-    await mountAndOpen(detail({ customized: true, updated_at: '2026-10-16T00:00:00' }))
-    expect(btn('prompt-status').textContent).toContain('已自定义')
+  it('具名生效态：选择器/状态显示模板名、文本域载入其内容、重命名/删除可用', async () => {
+    await mountAndOpen(ACTIVE_A)
+    expect(btn('prompt-status').textContent).toContain('东非市场')
+    expect(textarea().value).toBe(TEMPLATE_A)
+    expect((btn('prompt-rename') as HTMLButtonElement).disabled).toBe(false)
+    expect((btn('prompt-delete') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('变量按钮插入 token 至光标处', async () => {
@@ -120,66 +153,181 @@ describe('PromptEditorDialog 加载与呈现', () => {
   })
 })
 
-describe('PromptEditorDialog 保存', () => {
-  it('clean 模板直接保存并回显已自定义', async () => {
-    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
-    savePromptMock.mockResolvedValue(detail({ customized: true, warnings: [] }))
-    const wrapper = await mountAndOpen(detail())
-    await setTextarea(wrapper, DEFAULT)
-    await click('prompt-save')
-    expect(confirmSpy).not.toHaveBeenCalled()
-    expect(savePromptMock).toHaveBeenCalledWith('seed_expand', DEFAULT)
-    expect(btn('prompt-status').textContent).toContain('已自定义')
+describe('PromptEditorDialog 选择与切换（选择即生效）', () => {
+  it('切换到具名模板：调 activate 并载入全文', async () => {
+    activateMock.mockResolvedValue({
+      ...ACTIVE_A,
+      active_id: 't_b',
+      active_name: '展会渠道',
+    })
+    const wrapper = await mountAndOpen(detail({ templates: [item('t_b', '展会渠道', TEMPLATE_B)] }))
+    await selectTemplate(wrapper, 't_b')
+    expect(activateMock).toHaveBeenCalledWith('seed_expand', 't_b')
+    expect(textarea().value).toBe(TEMPLATE_B)
+    expect(btn('prompt-status').textContent).toContain('展会渠道')
   })
 
-  it('警告先确认：取消不保存，确认后保存并呈现服务端警告', async () => {
+  it('切回内置默认：activate null', async () => {
+    activateMock.mockResolvedValue(detail({ templates: ACTIVE_A.templates }))
+    const wrapper = await mountAndOpen(ACTIVE_A)
+    await selectTemplate(wrapper, '')
+    expect(activateMock).toHaveBeenCalledWith('seed_expand', null)
+    expect(textarea().value).toBe(DEFAULT)
+  })
+
+  it('脏状态切走：确认放弃才切换；取消不切换', async () => {
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('stay'))
+    const wrapper = await mountAndOpen(ACTIVE_A)
+    await setTextarea(wrapper, '改动过')
+    await selectTemplate(wrapper, 't_b')
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(activateMock).not.toHaveBeenCalled()
+
+    confirmSpy.mockResolvedValue('confirm' as never)
+    activateMock.mockResolvedValue({ ...ACTIVE_A, active_id: 't_b', active_name: '展会渠道' })
+    await selectTemplate(wrapper, 't_b')
+    expect(activateMock).toHaveBeenCalledWith('seed_expand', 't_b')
+  })
+})
+
+describe('PromptEditorDialog 保存（具名=更新；默认态=另存为引导，FR-015）', () => {
+  it('具名生效：更新内容，clean 直接调用', async () => {
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    updateMock.mockResolvedValue({ ...ACTIVE_A, warnings: [] })
+    const wrapper = await mountAndOpen(ACTIVE_A)
+    await setTextarea(wrapper, TEMPLATE_A + '\n新增要求')
+    await click('prompt-save')
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(updateMock).toHaveBeenCalledWith('seed_expand', 't_a', { content: TEMPLATE_A + '\n新增要求' })
+  })
+
+  it('具名生效：警告先确认——取消不保存，确认后保存', async () => {
     const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('cancel'))
-    const wrapper = await mountAndOpen(detail())
+    const wrapper = await mountAndOpen(ACTIVE_A)
     await setTextarea(wrapper, '只有一句指令')
     await click('prompt-save')
     expect(confirmSpy).toHaveBeenCalled()
-    expect(savePromptMock).not.toHaveBeenCalled()
+    expect(updateMock).not.toHaveBeenCalled()
 
     confirmSpy.mockResolvedValue('confirm' as never)
-    savePromptMock.mockResolvedValue(
-      detail({ customized: true, warnings: [{ code: 'missing_output_contract', message: 'x' }] }),
-    )
+    updateMock.mockResolvedValue({ ...ACTIVE_A, warnings: [{ code: 'missing_output_contract', message: 'x' }] })
     await click('prompt-save')
-    expect(savePromptMock).toHaveBeenCalledWith('seed_expand', '只有一句指令')
+    expect(updateMock).toHaveBeenCalledWith('seed_expand', 't_a', { content: '只有一句指令' })
+  })
+
+  it('默认态保存：引导另存为（命名后创建即生效）', async () => {
+    const promptSpy = vi
+      .spyOn(ElMessageBox, 'prompt')
+      .mockResolvedValue({ value: '新模板', action: 'confirm' } as never)
+    createMock.mockResolvedValue({
+      ...detail(),
+      active_id: 't_new',
+      active_name: '新模板',
+      customized: true,
+      templates: [item('t_new', '新模板', DEFAULT)],
+    })
+    const wrapper = await mountAndOpen(detail())
+    await setTextarea(wrapper, DEFAULT)
+    await click('prompt-save')
+    expect(promptSpy).toHaveBeenCalled()
+    expect(createMock).toHaveBeenCalledWith('seed_expand', {
+      name: '新模板',
+      content: DEFAULT,
+      activate: true,
+    })
+    expect(btn('prompt-status').textContent).toContain('新模板')
+  })
+
+  it('默认态保存：另存为取消则不落库、编辑内容保留', async () => {
+    vi.spyOn(ElMessageBox, 'prompt').mockRejectedValue(new Error('cancel'))
+    const wrapper = await mountAndOpen(detail())
+    await setTextarea(wrapper, '编辑中的内容')
+    await click('prompt-save')
+    expect(createMock).not.toHaveBeenCalled()
+    expect(textarea().value).toBe('编辑中的内容')
   })
 
   it('空模板阻断（不发请求）', async () => {
-    const wrapper = await mountAndOpen(detail())
+    const wrapper = await mountAndOpen(ACTIVE_A)
     await setTextarea(wrapper, '   ')
     await click('prompt-save')
-    expect(savePromptMock).not.toHaveBeenCalled()
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(createMock).not.toHaveBeenCalled()
   })
 
   it('保存失败（服务端 400）：保留编辑内容并复位在途状态', async () => {
     vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
-    savePromptMock.mockRejectedValue(new Error('bad_request'))
-    const wrapper = await mountAndOpen(detail())
+    updateMock.mockRejectedValue(new Error('bad_request'))
+    const wrapper = await mountAndOpen(ACTIVE_A)
     await setTextarea(wrapper, '只有一句指令')
     await click('prompt-save')
-    expect(savePromptMock).toHaveBeenCalled()
-    expect(textarea().value).toBe('只有一句指令') // 内容不丢
-    expect(btn('prompt-status').textContent).toContain('默认') // 状态未变
-    expect(btn('prompt-save').classList.contains('is-loading')).toBe(false) // 在途已复位
+    expect(updateMock).toHaveBeenCalled()
+    expect(textarea().value).toBe('只有一句指令')
+    expect(btn('prompt-save').classList.contains('is-loading')).toBe(false)
   })
 })
 
-describe('PromptEditorDialog 恢复默认与关闭', () => {
-  it('恢复默认：确认后调用并回显默认全文与默认徽标', async () => {
+describe('PromptEditorDialog 另存为/重命名/删除/恢复默认', () => {
+  it('另存为：命名后创建（activate=true）', async () => {
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '展会渠道', action: 'confirm' } as never)
+    createMock.mockResolvedValue({ ...ACTIVE_A, active_id: 't_new', active_name: '展会渠道' })
+    const wrapper = await mountAndOpen(ACTIVE_A)
+    await setTextarea(wrapper, TEMPLATE_A + '\n展会版')
+    await click('prompt-save-as')
+    expect(createMock).toHaveBeenCalledWith('seed_expand', {
+      name: '展会渠道',
+      content: TEMPLATE_A + '\n展会版',
+      activate: true,
+    })
+  })
+
+  it('重命名：prompt 命名后调 update；取消不调用', async () => {
+    const promptSpy = vi.spyOn(ElMessageBox, 'prompt').mockRejectedValue(new Error('cancel'))
+    await mountAndOpen(ACTIVE_A)
+    await click('prompt-rename')
+    expect(promptSpy).toHaveBeenCalled()
+    expect(updateMock).not.toHaveBeenCalled()
+
+    promptSpy.mockResolvedValue({ value: '东非-电力', action: 'confirm' } as never)
+    updateMock.mockResolvedValue({ ...ACTIVE_A, active_name: '东非-电力' })
+    await click('prompt-rename')
+    expect(updateMock).toHaveBeenCalledWith('seed_expand', 't_a', { name: '东非-电力' })
+    expect(btn('prompt-status').textContent).toContain('东非-电力')
+  })
+
+  it('删除生效模板：确认后调 delete，服务端回退默认并刷新呈现', async () => {
     vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
-    resetPromptMock.mockResolvedValue(detail())
-    await mountAndOpen(detail({ customized: true, content: '自定义 {description} {existing_nodes} {count} {output_contract}' }))
-    expect(btn('prompt-status').textContent).toContain('已自定义')
-    await click('prompt-reset')
-    expect(resetPromptMock).toHaveBeenCalledWith('seed_expand')
+    deleteMock.mockResolvedValue(detail({ templates: [item('t_b', '展会渠道', TEMPLATE_B)] }))
+    await mountAndOpen(ACTIVE_A)
+    await click('prompt-delete')
+    expect(deleteMock).toHaveBeenCalledWith('seed_expand', 't_a')
+    expect(btn('prompt-status').textContent).toContain('默认')
+    expect(textarea().value).toBe(DEFAULT)
+  })
+
+  it('默认态下重命名/删除置灰', async () => {
+    await mountAndOpen(detail({ templates: [item('t_b', '展会渠道', TEMPLATE_B)] }))
+    expect((btn('prompt-rename') as HTMLButtonElement).disabled).toBe(true)
+    expect((btn('prompt-delete') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('恢复默认：确认后 activate null（模板库保留）', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    activateMock.mockResolvedValue(detail({ templates: ACTIVE_A.templates }))
+    await mountAndOpen(ACTIVE_A)
+    await click('prompt-restore-default')
+    expect(activateMock).toHaveBeenCalledWith('seed_expand', null)
     expect(textarea().value).toBe(DEFAULT)
     expect(btn('prompt-status').textContent).toContain('默认')
   })
 
+  it('恢复默认：默认态下置灰', async () => {
+    await mountAndOpen(detail())
+    expect((btn('prompt-restore-default') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('PromptEditorDialog 关闭', () => {
   it('脏关闭：确认放弃才关闭；取消则留在编辑器', async () => {
     const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('stay'))
     const wrapper = await mountAndOpen(detail())

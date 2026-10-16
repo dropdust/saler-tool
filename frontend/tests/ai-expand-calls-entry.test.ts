@@ -200,11 +200,14 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
     return {
       feature: 'seed_expand',
       label: 'AI 扩充（种子扩充）',
-      content: '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n约 {count} 条。',
       default_content: '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n约 {count} 条。',
+      active_id: null,
+      active_name: null,
       customized: false,
-      updated_at: null,
       max_length: 8000,
+      max_name_length: 60,
+      max_templates: 50,
+      templates: [],
       variables: [
         { name: 'description', label: '业务描述', render: '有值 →「业务描述：…」' },
         { name: 'existing_nodes', label: '已有节点名单', render: '逐行' },

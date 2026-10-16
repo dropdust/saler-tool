@@ -1,5 +1,5 @@
 /**
- * AI 提示词接口薄封装（006 契约 §1~§5）。
+ * AI 提示词接口薄封装（006 契约 §1~§5，模板库版）。
  * 模板编辑器、两个对话框徽标与 AI 辅助均经此处（类型见 api/types.ts）。
  */
 import { api } from './client'
@@ -18,12 +18,27 @@ export function getPrompt(feature: PromptFeatureKey) {
   return api.get<PromptTemplateDetail>(`/ai/prompts/${feature}`)
 }
 
-export function savePrompt(feature: PromptFeatureKey, content: string) {
-  return api.put<PromptTemplateDetail>(`/ai/prompts/${feature}`, { content })
+export function createTemplate(
+  feature: PromptFeatureKey,
+  payload: { name: string; content: string; activate?: boolean },
+) {
+  return api.post<PromptTemplateDetail>(`/ai/prompts/${feature}/templates`, payload)
 }
 
-export function resetPrompt(feature: PromptFeatureKey) {
-  return api.post<PromptTemplateDetail>(`/ai/prompts/${feature}/reset`)
+export function updateTemplate(
+  feature: PromptFeatureKey,
+  templateId: string,
+  payload: { name?: string; content?: string },
+) {
+  return api.put<PromptTemplateDetail>(`/ai/prompts/${feature}/templates/${templateId}`, payload)
+}
+
+export function deleteTemplate(feature: PromptFeatureKey, templateId: string) {
+  return api.del<PromptTemplateDetail>(`/ai/prompts/${feature}/templates/${templateId}`)
+}
+
+export function activateTemplate(feature: PromptFeatureKey, id: string | null) {
+  return api.put<PromptTemplateDetail>(`/ai/prompts/${feature}/active`, { id })
 }
 
 export type PromptAssistPayload =
