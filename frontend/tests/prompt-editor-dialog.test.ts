@@ -134,10 +134,13 @@ beforeEach(() => {
 
 describe('PromptEditorDialog 加载与呈现', () => {
   it('默认态：选择器=内置默认、模板全文/计数/固定段/变量面板、状态「默认」', async () => {
-    await mountAndOpen(detail())
+    const wrapper = await mountAndOpen(detail())
     expect(getPromptMock).toHaveBeenCalledWith('seed_expand')
     // 下拉未展开时仅选中项渲染标签
     expect(document.body.textContent).toContain('内置默认')
+    // 默认态选择器值为 ''（el-select 视为「未选择」，不渲染选中标签）——「当前=内置默认」由
+    // placeholder 承担（T301 真实浏览器验收发现：缺失时实际显示灰色「请选择」，与 quickstart V1② 不符）
+    expect(wrapper.findComponent(ElSelect).props('placeholder')).toBe('内置默认（不可修改）')
     expect(btn('prompt-status').textContent).toContain('默认')
     expect(textarea().value).toBe(DEFAULT)
     expect(btn('prompt-counter').textContent).toContain(`${DEFAULT.length} / 8000`)

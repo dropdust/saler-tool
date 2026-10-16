@@ -89,7 +89,9 @@
           size="small"
           :type="promptBadge === '默认' ? 'info' : 'warning'"
           data-test="content-prompt-badge"
-        >{{ promptBadge }}</el-tag>
+        >
+          {{ promptBadge }}
+        </el-tag>
       </el-button>
       <el-button v-if="summary" type="success" plain @click="goTheme">去查看</el-button>
       <el-button

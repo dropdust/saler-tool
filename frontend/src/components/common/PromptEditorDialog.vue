@@ -25,6 +25,7 @@
               :model-value="selectedId"
               data-test="prompt-select"
               style="width: 280px"
+              placeholder="内置默认（不可修改）"
               @change="onSelect"
             >
               <el-option value="" label="内置默认（不可修改）" />

@@ -84,7 +84,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 - [X] T298 [US1] 模板库端点（红→绿，依赖 T297）：`backend/src/saler/api/routes/ai.py` 按契约 §1~§4 重写提示词端点——`GET /ai/prompts`（列表含 active_id/active_name/template_count）、`GET /ai/prompts/{feature}`（详情含 templates 全文 + max_name_length/max_templates）、`POST /ai/prompts/{feature}/templates`（201；名称类 400、库满 400、warnings 随详情返回）、`PUT /ai/prompts/{feature}/templates/{id}`（内容/改名；未知 id 404）、`DELETE /ai/prompts/{feature}/templates/{id}`（生效自动回退）、`PUT /ai/prompts/{feature}/active`（{id|null}；恢复默认=null；未知 id 404）；删除旧 `PUT /ai/prompts/{feature}` 与 `POST …/reset`；重写/扩展 `backend/tests/contract/test_ai_prompts_api.py`（各端点全形状、404、400 系列、删除生效回退、两功能独立、warnings 三码、名称边界）→ **红→绿**（2026-10-16 实作：17 项红→绿；与 T297 同提交——store 接口替换使路由层必须同步改，跨任务原子性见提交说明；全量 462 passed）
 - [X] T299 [US1] 编辑器模板库 UI（红→绿，依赖 T285/T298）：`frontend/src/api/types.ts` + `frontend/src/api/prompts.ts` 适配新形状（PromptTemplateSummary/Detail/TemplateItem；createTemplate/updateTemplate/deleteTemplate/activateTemplate）；`frontend/src/components/common/PromptEditorDialog.vue` 增模板选择器（「内置默认」+ 具名模板；**选择即生效**：无脏修改直调 activate 并载入全文，有脏修改先确认放弃）+「另存为」（命名输入 → create 即生效）/「重命名」（仅具名）/「删除」（仅具名、二次确认、删除生效由服务端回退并刷新为默认）；保存语义改造（生效为具名 → update；生效为默认 → 引导另存为，FR-015）；「恢复默认」= activate null（保留库）；徽标显示生效模板名；适配/扩展 `frontend/tests/prompt-editor-dialog.test.ts`（选择器渲染与切换即生效、脏切换确认、另存为流、重命名、删除与回退默认、默认态保存引导、原有用例迁移）→ **红→绿**（2026-10-16 实作：20 项红→绿；选择器用 `:model-value + @change` 受控写法——取消确认时选择器自动回退原值；ai-expand 夹具同步新形状保 vue-tsc 绿；全量 217 passed + lint + vue-tsc clean）
 - [X] T300 [US1] 对话框徽标升级为生效模板名（红→绿，依赖 T286/T298）：`frontend/src/views/seeds/AiExpandDialog.vue` 徽标由「默认/已自定义」升级为「默认 / 生效模板名」（取 active_name）；适配 `frontend/tests/ai-expand-calls-entry.test.ts`（徽标三态：默认/具名/取数失败不显示；编辑器 changed 回调刷新）→ **红→绿**（2026-10-16 实作：2 项红→绿 + 新增"取数失败不显示"用例；顺带消除 T286 遗留的 2 条模板换行 lint 告警；全量 218 passed + lint（0 告警）+ vue-tsc clean）
-- [ ] T301 [US1] 验收（quickstart V1 修订版 + V4，取代 T287 范围）：按修订后的 quickstart 执行——多模板端到端（创建"东非市场"→生效徽标→运行→明细核对→再建"展会渠道"→切换即生效→运行核对→重命名→删除生效模板回退默认→边界抽查（空/超长/未知变量/重名/默认态保存引导/运行中切换不影响在途）→V4 默认等价；结论勾注（SC-001~004、FR-001~008/014/015）→ 回填验收结论
+- [X] T301 [US1] 验收（quickstart V1 修订版 + V4，取代 T287 范围）：按修订后的 quickstart 执行——多模板端到端（创建"东非市场"→生效徽标→运行→明细核对→再建"展会渠道"→切换即生效→运行核对→重命名→删除生效模板回退默认→边界抽查（空/超长/未知变量/重名/默认态保存引导/运行中切换不影响在途）→V4 默认等价；结论勾注（SC-001~004、FR-001~008/014/015）→ 回填验收结论（2026-10-16 实作：✅ 通过——构建产物 + `--server` + 临时数据目录 + headless Chrome CDP 真实点击流 + 本机 Mock Provider（明细以 provider 收到的真实请求为准并经 llm_call 交叉核验）；**55 项断言全过**（`v1-report.json` + 17 截图）：东非市场另存为即生效、运行明细 `{description}/{existing_nodes}/{count}` 替换与固定段原文/JSON 守门、出参体现新增指令（展会节点+种子 pending 落库）、展会渠道切换即生效、重命名/删除回退默认且库保留、默认回跑；边界（空/超长 8001 计数变红阻断/三警告仍可保存/重名 400/默认态保存引导/脏关闭）全达；**运行中切换与删除真实时序核对**（provider 注入 4s 延迟拉开在途窗，任务 12~15：在途=开始快照、切换/删除仅影响下一次）——截图 `v1-17-inflight-drawer.png`；V4 双侧默认运行 + golden 24 passed 逐字锁定。**发现并修复 1 处缺陷**：默认态模板选择器实际显示灰色「请选择」而非「内置默认（不可修改）」（el-select 视空值为未选择）→ placeholder 承担呈现 + 单测红→绿；顺带消除 AiContentDialog 2 条既有 lint 告警。全量 backend 472 / frontend 232 passed + lint 0 告警 + vue-tsc clean）
 
 **Checkpoint**: US1 完成——扩充提示词可多模板化、可核对、可回退，构成 MVP
 
@@ -104,7 +104,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 ### Implementation for User Story 2
 
-- [ ] T290 [US2] 验收（quickstart V2）：按 quickstart 执行起草模板自定义端到端（含 `{tone}` 两态与占位符豁免核对、两功能独立核对）；结论勾注（FR-001~003/007、US2 场景）→ 回填验收结论
+- [X] T290 [US2] 验收（quickstart V2）：按 quickstart 执行起草模板自定义端到端（含 `{tone}` 两态与占位符豁免核对、两功能独立核对）；结论勾注（FR-001~003/007、US2 场景）→ 回填验收结论（2026-10-16 实作：✅ 通过——CDP 真实点击流 + Mock Provider（明细经任务中心任务卡「调用明细」核对）；**35 项断言全过**（`v2-report.json` + 10 截图）：默认起草模板全文/变量面板/两态说明就位；"东非开发信模板"（加写作约束）另存为即生效；运行 A 语气有值「语气：直接、专业。」、运行 B 语气缺省「语气：专业、克制、以价值为先。」（任务 9/10 llm_call 落库交叉核验）、`{{company_name}}`/`{{signature}}` 原样保留；结果流向 `content_variant` zh/draft/llm_assisted + 逐次新版本；两功能独立（扩充侧生效/库/徽标均不受影响）；切回默认还原且起草库保留（该次默认运行即 V4 起草侧证据）。注：起草对话框无内嵌「调用明细」入口，经任务卡核对——与 V1 对话框内入口并存，属既有形态差异）
 
 **Checkpoint**: US2 完成——两处 AI 使用点均可自定义，模板互相隔离
 
@@ -124,7 +124,7 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 ### Implementation for User Story 3
 
-- [ ] T293 [US3] 验收（quickstart V3）：按 quickstart 执行辅助全链（生成/采纳/丢弃/优化/明细/409 指引；常规网络响应 ≤30s 抽查）；结论勾注（SC-005/006、FR-009~012）→ 回填验收结论
+- [X] T293 [US3] 验收（quickstart V3）：按 quickstart 执行辅助全链（生成/采纳/丢弃/优化/明细/409 指引；常规网络响应 ≤30s 抽查）；结论勾注（SC-005/006、FR-009~012）→ 回填验收结论（2026-10-16 实作：✅ 通过——CDP 真实点击流 + Mock Provider（provider 注入 3.5s 延迟拉开请求窗）；**23 项断言全过**（`v3-report.json` + 9 截图）：请求期 loading + 编辑器可继续编辑（追加文本完整保留）；建议全文+notes（往返实测 3.6s，≤30s 常规口径；外网延迟未在本环境测量）；编辑器与已保存模板均未变；采用=建议原文且提示"保存后才生效"、脏关闭重开=已保存模板（采用≠保存）；丢弃/优化对照；明细 operation=prompt_assist 入参（生成含意图+变量目录+固定段原文、优化含润色指令）/出参 `{suggestion, notes}`/用量 150 tokens；删模型配置 409「设置 → 大模型」指引且编辑器内容无损（验后已还原 MockLLM））
 
 **Checkpoint**: US3 完成——写不好提示词的用户也能获得可用模板
 
