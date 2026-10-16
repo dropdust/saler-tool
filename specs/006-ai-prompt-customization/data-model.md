@@ -2,30 +2,37 @@
 
 **Feature**: `006-ai-prompt-customization` | **Date**: 2026-10-16 | 上游：[spec.md](spec.md) / [research.md](research.md)
 
-本特性**不做数据库迁移、不新增数据表**：模板复用既有 `app_setting` KV 表；调用留痕复用既有 `llm_call` 表（仅新增 `operation` 取值约定）。新增对象全部是**代码对象**（后端 `core/prompts/` 注册表）与**前端展示态**。
+本特性**不做数据库迁移、不新增数据表**：模板库复用既有 `app_setting` KV 表；调用留痕复用既有 `llm_call` 表（仅新增 `operation` 取值约定）。新增对象全部是**代码对象**（后端 `core/prompts/` 注册表与存取服务）与**前端展示态**。
+
+**2026-10-16 修订（用户澄清）**：存储形态由"单份生效模板"升级为**模板库**（内置默认 + 多份具名模板 + 每功能一个生效选择）。旧单份键 `prompt_template_{feature}` **从未发布**（006 尚在实现中），直接替换为下列形状，无迁移。
 
 ---
 
-## 1. 提示词模板（持久化：`app_setting` 行）
+## 1. 提示词模板库（持久化：`app_setting` 行）
 
 | 键 | 值形状 | 语义 |
 | --- | --- | --- |
-| `prompt_template_seed_expand` | `{"content": "<模板文本>"}` | AI 扩充（`ai_seed_expand`）当前生效模板；**行存在 = 已自定义** |
-| `prompt_template_content_draft` | `{"content": "<模板文本>"}` | AI 起草（`ai_content_draft`）当前生效模板；同上 |
+| `prompt_templates_seed_expand` | `{"active_id": "<id>" \| null, "items": [{"id", "name", "content", "updated_at"}]}` | AI 扩充（`ai_seed_expand`）模板库与生效选择 |
+| `prompt_templates_content_draft` | 同上 | AI 起草（`ai_content_draft`）模板库与生效选择（独立） |
 
-- `updated_at`（既有列）= 最近一次保存时间；恢复默认删除行后无时间。
-- 读取口径：`settings_service.get(db, KEY, None)` → `None` 用注册表默认；`行存在` → 自定义。
+- **内置默认模板**永不落库：`active_id=null`（或行不存在）即用注册表默认；不可修改、不可删除。
+- `active_id` 指向 `items` 中不存在的 id（脏数据）→ 读取回落默认并视为未自定义（防脏数据外溢）。
+- item：`id`（服务端生成的短随机标识）、`name`（同功能内唯一：strip 后比对）、`content`（≤8000，规则见契约 §7）、`updated_at`（ISO 字符串，服务端写）。
+- 边界：名称必填 ≤60 字符；每功能 ≤50 份（满载给出明确错误）。
+- 运行读取口径（`store.get_effective`）：`(生效模板内容, 是否自定义)`——签名与单模板版一致，`run_expansion`/`run_content_draft` 零改动。
 - 状态机（每功能独立）：
 
 ```text
-                 保存（PUT，校验通过）
-   默认（无行） ─────────────────────▶ 已自定义（有行）
-        ▲                                   │
-        └────────── 恢复默认（删行）──────────┘
+                   创建/另存为（命名）                切换（选择即生效）
+  默认（active_id=null） ◀──────────────▶ 生效=某具名模板
+        ▲    │                                  │
+        │    │ 另存为（默认态保存引导）            │ 删除生效模板（自动回退）
+        │    ▼                                  ▼
+        └── items: [ 具名模板A, 具名模板B, … ]（增/改名/删，互不影响生效选择）
 ```
 
-- 写入约束：空/纯空白、>8000 字符被拒（400）；未知变量/缺失变量/缺失结构槽位以警告返回、不阻断（规则见契约 §7）。
-- 通用 `PUT /settings` 对 `prompt_template_*` 键一律拒绝（防绕过域校验）。
+- 写入约束（创建/更新内容均适用）：空/纯空白、>8000 字符、名称缺失或重名 → 400（不改动既有数据）；未知变量/缺失变量/缺失槽位 → warnings 不阻断（规则见契约 §7）。
+- 通用 `PUT /settings` 对 `prompt_templates_*` 键一律拒绝（前缀守卫沿用 T280，`prompt_template_` 前缀已覆盖复数形态）。
 
 ## 2. 提示词功能注册表（代码对象：`core/prompts/registry.py`）
 
@@ -56,7 +63,7 @@
 ### 2.3 组合管线（compose）
 
 ```text
-有效模板 = 设置行 content（若已自定义）│ 注册表默认模板
+有效模板 = 生效模板内容（active_id 指向的具名模板）│ 注册表默认模板
 用户消息 = render(有效模板, 变量上下文)      # {output_contract} → 固定段原文
 系统消息 = provider 既有默认（"只输出严格 JSON…"）   # 不变
 ```
@@ -79,6 +86,6 @@
 
 ## 4. 前端对象（展示态，不落库）
 
-- **提示词编辑器状态**：`{feature, content(编辑中), template(已保存详情), dirty, saving, assist:{mode, intent, draft, loading, suggestion, notes}}`。
-- **状态徽标**：对话框打开时经 `GET /ai/prompts` 取得 `customized` 布尔，呈现"默认 / 已自定义"。
+- **提示词编辑器状态**：`{feature, content(编辑中), templates(库详情), active_id, dirty, saving, assist:{mode, intent, draft, loading, suggestion, notes}}`；选择器切换即调 `PUT active`（无未保存修改时）并载入对应内容。
+- **状态徽标**：对话框打开时经 `GET /ai/prompts` 取得 `customized` 与 `active_name`，呈现"默认"或生效模板名。
 - **建议态**：`suggestion` 独立于编辑内容展示；"采用"写入编辑区（dirty=true）、"丢弃"清除；二者均不触发保存。

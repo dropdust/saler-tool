@@ -76,9 +76,17 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 - [X] T286 [US1] 扩充对话框接入入口（红→绿，依赖 T285）：`frontend/src/views/seeds/AiExpandDialog.vue` 增「提示词」入口（表单态可见；旁挂「默认/已自定义」徽标，打开对话框时经 `getPromptList` 取数）+ 挂载 `PromptEditorDialog`（feature=`seed_expand`，append-to-body 叠层）；保存/恢复后徽标即时刷新；扩展 `frontend/tests/ai-expand-calls-entry.test.ts`——入口出现、徽标两态、点击以正确 feature 打开编辑器、编辑器保存回调刷新徽标（FR-002、contract §8）→ **红→绿**（2026-10-16 实作：5 项红→绿（含 panelMode 无入口、徽标取数失败不显示不打断）；全量 207 passed + lint + vue-tsc clean）
 
-- [ ] T287 [US1] 验收（quickstart V1 + V4）：按 [quickstart.md](quickstart.md) 执行——编辑器全要素核对、≤3 操作保存、扩充运行后明细逐项核对（自定义文本/变量替换/固定段/系统消息）、产出体现指令、恢复默认还原、边界抽查（空/超长/未知变量/缺变量/缺槽位兜底）、运行中修改不影响在途运行；不自定义路径执行 V4 默认等价；结论勾注（SC-001~004、FR-001~008）→ 回填验收结论
+- [X] T287 [US1] 验收（quickstart V1 + V4）：按 [quickstart.md](quickstart.md) 执行——编辑器全要素核对、≤3 操作保存、扩充运行后明细逐项核对（自定义文本/变量替换/固定段/系统消息）、产出体现指令、恢复默认还原、边界抽查（空/超长/未知变量/缺变量/缺槽位兜底）、运行中修改不影响在途运行；不自定义路径执行 V4 默认等价；结论勾注（SC-001~004、FR-001~008）→ 回填验收结论（2026-10-16 修订：用户澄清"多模板 + 当前生效"（research R9），单模板版验收**并入 T301 一体验收**——避免对将被改造的流程做双重取证）
 
-**Checkpoint**: US1 完成——扩充提示词可自定义、可核对、可回退，构成 MVP
+### 模板库修订（2026-10-16 用户澄清：多模板 + 当前生效，spec/contract/data-model 已同步修订）
+
+- [ ] T297 [US1] 模板库存取层（红→绿，依赖 T279/T280）：重写 `backend/src/saler/core/prompts/store.py`——键换 `prompt_templates_{feature}`（旧键从未发布，无迁移）：`list_templates(db, feature) -> (items, active_id)`、`get_effective(db, feature) -> (content, customized)`（**签名不变**：active_id 指向存在模板 → 其内容；否则注册表默认——脏数据回落）、`create(db, feature, *, name, content, activate=True) -> dict`（名称 strip 必填、≤60、同功能唯一、库容 ≤50；内容经 registry 校验，errors 抛 ValidationFailed、warnings 返回）、`update(db, feature, template_id, *, name=None, content=None) -> list[dict]`（404 语义由调用方判定：id 不存在抛 NotFound 或返回 None——取 NotFound）、`delete(db, feature, template_id)`（删除生效模板自动置 active_id=null）、`activate(db, feature, template_id | None)`（id 校验存在）；`get_active(db, feature) -> dict | None`（徽标用）；重写 `backend/tests/unit/test_prompt_store.py`（默认回退/创建即生效/创建不生效/更新内容与改名/重名与空名拒绝/删除生效回退默认/删除非生效不动生效/activate null 幂等/两功能独立/脏数据回退/名称与容量边界）；适配 `backend/tests/unit/test_seed_ai.py` 自定义模板用例到新 API（create(..., activate=True)）→ **红→绿**
+- [ ] T298 [US1] 模板库端点（红→绿，依赖 T297）：`backend/src/saler/api/routes/ai.py` 按契约 §1~§4 重写提示词端点——`GET /ai/prompts`（列表含 active_id/active_name/template_count）、`GET /ai/prompts/{feature}`（详情含 templates 全文 + max_name_length/max_templates）、`POST /ai/prompts/{feature}/templates`（201；名称类 400、库满 400、warnings 随详情返回）、`PUT /ai/prompts/{feature}/templates/{id}`（内容/改名；未知 id 404）、`DELETE /ai/prompts/{feature}/templates/{id}`（生效自动回退）、`PUT /ai/prompts/{feature}/active`（{id|null}；恢复默认=null；未知 id 404）；删除旧 `PUT /ai/prompts/{feature}` 与 `POST …/reset`；重写/扩展 `backend/tests/contract/test_ai_prompts_api.py`（各端点全形状、404、400 系列、删除生效回退、两功能独立、warnings 三码、名称边界）→ **红→绿**
+- [ ] T299 [US1] 编辑器模板库 UI（红→绿，依赖 T285/T298）：`frontend/src/api/types.ts` + `frontend/src/api/prompts.ts` 适配新形状（PromptTemplateSummary/Detail/TemplateItem；createTemplate/updateTemplate/deleteTemplate/activateTemplate）；`frontend/src/components/common/PromptEditorDialog.vue` 增模板选择器（「内置默认」+ 具名模板；**选择即生效**：无脏修改直调 activate 并载入全文，有脏修改先确认放弃）+「另存为」（命名输入 → create 即生效）/「重命名」（仅具名）/「删除」（仅具名、二次确认、删除生效由服务端回退并刷新为默认）；保存语义改造（生效为具名 → update；生效为默认 → 引导另存为，FR-015）；「恢复默认」= activate null（保留库）；徽标显示生效模板名；适配/扩展 `frontend/tests/prompt-editor-dialog.test.ts`（选择器渲染与切换即生效、脏切换确认、另存为流、重命名、删除与回退默认、默认态保存引导、原有用例迁移）→ **红→绿**
+- [ ] T300 [US1] 对话框徽标升级为生效模板名（红→绿，依赖 T286/T298）：`frontend/src/views/seeds/AiExpandDialog.vue` 徽标由「默认/已自定义」升级为「默认 / 生效模板名」（取 active_name）；适配 `frontend/tests/ai-expand-calls-entry.test.ts`（徽标三态：默认/具名/取数失败不显示；编辑器 changed 回调刷新）→ **红→绿**
+- [ ] T301 [US1] 验收（quickstart V1 修订版 + V4，取代 T287 范围）：按修订后的 quickstart 执行——多模板端到端（创建"东非市场"→生效徽标→运行→明细核对→再建"展会渠道"→切换即生效→运行核对→重命名→删除生效模板回退默认→边界抽查（空/超长/未知变量/重名/默认态保存引导/运行中切换不影响在途）→V4 默认等价；结论勾注（SC-001~004、FR-001~008/014/015）→ 回填验收结论
+
+**Checkpoint**: US1 完成——扩充提示词可多模板化、可核对、可回退，构成 MVP
 
 ---
 
@@ -90,9 +98,9 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 ### Tests for User Story 2 ⚠️（先写，确认失败）
 
-- [ ] T288 [US2] 起草运行接入组合管线（红→绿，依赖 T279/T281）：`backend/src/saler/core/content/ai.py`——`run_content_draft` 删除 `_build_draft_prompt` 硬编码路径（函数一并删除），改为任务开始时 `store.get_effective(db, "content_draft")` + `registry.compose`（上下文：`brief`/`tone`（None→缺省渲染）/`content_type`（主题值）/`language`（母版语言））；新建 `backend/tests/unit/test_content_ai.py`——自定义模板生效断言（FakeLLMProvider messages 含自定义文本、`{brief}`→「业务要点：…」、`{tone}` 两态、`{{company_name}}` 原样保留、固定段在位）；默认路径 golden 互验；两功能独立（改扩充模板不影响起草运行）→ **红→绿**
+- [ ] T288 [US2] 起草运行接入组合管线（红→绿，依赖 T279/T281/T297）：`backend/src/saler/core/content/ai.py`——`run_content_draft` 删除 `_build_draft_prompt` 硬编码路径（函数一并删除），改为任务开始时 `store.get_effective(db, "content_draft")`（模板库修订后取生效模板；签名不变）+ `registry.compose`（上下文：`brief`/`tone`（None→缺省渲染）/`content_type`（主题值）/`language`（母版语言））；新建 `backend/tests/unit/test_content_ai.py`——自定义模板生效断言（FakeLLMProvider messages 含自定义文本、`{brief}`→「业务要点：…」、`{tone}` 两态、`{{company_name}}` 原样保留、固定段在位；模板经 `store.create(..., activate=True)` 预置）；默认路径 golden 互验；两功能独立（扩充模板库变更不影响起草运行）→ **红→绿**
 
-- [ ] T289 [US2] 内容对话框接入入口（红→绿，依赖 T285）：`frontend/src/views/content/AiContentDialog.vue` 起草/润色页签增「提示词」入口 + 徽标（feature=`content_draft`，「主题级多语言生成」页签不加）+ 挂载编辑器；文档范围提示保持既有口径；扩展 `frontend/tests/dialog-background.test.ts`（或按现状归属该对话框的测试文件）——起草页签入口出现、语言生成页签无入口、以正确 feature 打开编辑器 → **红→绿**
+- [ ] T289 [US2] 内容对话框接入入口（红→绿，依赖 T285/T300）：`frontend/src/views/content/AiContentDialog.vue` 起草/润色页签增「提示词」入口 + 徽标（feature=`content_draft`；徽标显示「默认/生效模板名」，同 T300 口径；「主题级多语言生成」页签不加）+ 挂载编辑器；文档范围提示保持既有口径；扩展 `frontend/tests/dialog-background.test.ts`（或按现状归属该对话框的测试文件）——起草页签入口出现、语言生成页签无入口、以正确 feature 打开编辑器、徽标两态 → **红→绿**
 
 ### Implementation for User Story 2
 
@@ -126,9 +134,9 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 **Purpose**: 契约同步、全量回归与质量门、边界抽查与文档
 
-- [ ] T294 契约同步（宪法"契约变更必须同步"）：按 [contracts/prompt-customization-contract.md](contracts/prompt-customization-contract.md) §9 增补 `specs/001-sales-tool/contracts/local-api.md` §AI 节——4 个新端点（GET /ai/prompts、GET/PUT /ai/prompts/{feature}、POST …/reset、POST …/assist）与 `llm_call.operation` 新取值 `prompt_assist`（既有行不改）；核对 006 工件间一致性（spec/plan/research/data-model/contract/quickstart）
+- [ ] T294 契约同步（宪法"契约变更必须同步"）：按 [contracts/prompt-customization-contract.md](contracts/prompt-customization-contract.md) §9（模板库版）增补 `specs/001-sales-tool/contracts/local-api.md` §AI 节——新端点组（GET /ai/prompts、GET /ai/prompts/{feature}、POST/PUT/DELETE …/templates[/{id}]、PUT …/active、POST …/assist）与 `llm_call.operation` 新取值 `prompt_assist`（既有行不改）；核对 006 工件间一致性（spec/plan/research/data-model/contract/quickstart）
 - [ ] T295 全量回归与质量门：`cd backend && uv run pytest -q` 全量绿、`cd frontend && pnpm test && pnpm lint` 全量绿；运行 `/speckit-analyze` 核对工件间一致（0 CRITICAL）；重点回归既有 `backend/tests/unit/test_seed_ai.py` 与内容流集成测试（运行管线替换不破坏既有断言，如破坏则更新断言并说明"为什么"）
-- [ ] T296 边界抽查与文档：quickstart V1 边界集复跑（空/超长/未知变量/缺变量/缺槽位兜底/运行中修改）；`docs/user-guide.md` 增「AI 提示词自定义与辅助」一节（入口/变量/固定结构/恢复默认/辅助与采用语义/明细核对的用户口径）；勾注 quickstart 全部场景结论
+- [ ] T296 边界抽查与文档：quickstart V1 边界集复跑（空/超长/未知变量/缺变量/缺槽位兜底/重名/默认态保存引导/运行中切换或删除）；`docs/user-guide.md` 增「AI 提示词自定义与辅助」一节（入口/变量/固定结构/**模板库（另存为/切换即生效/重命名/删除回退/默认不可改）**/辅助与采用语义/明细核对的用户口径）；勾注 quickstart 全部场景结论
 
 ---
 
@@ -137,10 +145,12 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 ### Phase Dependencies
 
 - **Setup（T278）**：无依赖，立即开始；**前置纪律**：在途 005 改动尽量归位后再开（T286/T289 触碰同文件）
+- **执行顺序提示（2026-10-16 修订后）**：T279–T286（已完成）→ **T297→T298→T299→T300→T301** → T288→T289→T290 → T291→T292→T293 → T294→T295→T296
 - **Foundational（T279–T282）**：依赖 Setup——**阻塞全部用户故事**；T279/T280/T282 相互独立可并行（三个不同文件域），T281 依赖 T279+T280
 - **US1（T283–T287）**：T283/T284 可并行（端点 vs 运行管线，均依赖 T281）；T285 依赖 T282；T286 依赖 T285；T287 收尾
-- **US2（T288–T290）**：T288 依赖 T281（与 US1 后端线并行）；T289 依赖 T285（US1 组件）；T290 收尾
-- **US3（T291–T293）**：T291 依赖 T281（与 US1/US2 并行线）；T292 依赖 T285+T291；T293 收尾
+- **US1·模板库修订（T297–T301，2026-10-16 澄清后新增）**：T297 重写 store（依赖 T280）；T298 端点重写依赖 T297；T299 编辑器依赖 T285+T298；T300 徽标依赖 T286+T298；T301 验收取代 T287 范围——**US2/US3 均应在此修订完成后进行**（T288/T289 依赖新 store/徽标口径）
+- **US2（T288–T290）**：T288 依赖 T281/T297（与 US1 后端线并行）；T289 依赖 T285/T300（US1 组件与徽标口径）；T290 收尾
+- **US3（T291–T293）**：T291 依赖 T281（与 US1/US2 并行线）；T292 依赖 T285/T299+T291；T293 收尾
 - **Polish（T294–T296）**：依赖全部故事完成
 
 ### Within Each User Story
@@ -190,7 +200,7 @@ Task: "扩充运行接入 in backend/src/saler/core/seeds/ai.py"                
 
 ### Parallel Team Strategy
 
-单人线性 T278→T296 即可；如需并行：后端线（T279/T280/T281→T283/T284→T288→T291）与前端线（T282→T285→T286→T289→T292）可分线，T287/T290/T293 验收点合流。
+单人线性 T278→T296 即可（模板库修订后实际顺序：T279–T286 已完成 → T297→T298→T299→T300→T301 → T288→T289→T290 → T291→T292→T293 → T294→T295→T296）；如需并行：后端线（T279/T280/T281→T297/T298→T288→T291）与前端线（T282→T285/T299→T300→T289→T292）可分线，T301/T290/T293 验收点合流。
 
 ---
 
@@ -199,7 +209,7 @@ Task: "扩充运行接入 in backend/src/saler/core/seeds/ai.py"                
 - `[P]` = 不同文件、无未完成依赖，可并行；`[USx]` 标签用于追溯（Setup/Foundational/Polish 不带标签）
 - 测试一律先失败再实现（宪法第 I 条）；"书写即绿"任务失败即表明上游回归；golden 等价用例失败即表明默认模板被意外改动（SC-002 守护线）
 - 每个任务完成即提交（提交信息含任务 ID；如 `T279: 提示词注册表——渲染/组合/校验与 legacy 逐字等价（为什么：SC-002 零回归需可自动断言的基线）`）
-- 已知共享文件顺序触碰（勿并行）：`core/prompts/registry.py`（T279 → 只读引用）、`core/prompts/store.py`（T281 → T283/T284/T288/T291）、`api/routes/ai.py` 与 `tests/contract/test_ai_prompts_api.py`（T283 → T291）、`components/common/PromptEditorDialog.vue` 与 `prompt-editor-dialog.test.ts`（T285 → T292）、`AiExpandDialog.vue`（T286）、`AiContentDialog.vue`（T289；另有 005 在途改动，T278 纪律先行）
-- 语义纪律（全部落于契约与 data-model）：可编辑的是业务指令模板，`{output_contract}` 槽位与固定段**永不可改**（缺失自动补尾——解析性不破坏）；辅助**不落库**、采用≠保存（FR-010）；辅助与运行同口径入 `llm_call`（含用量）；模板修改只影响其后新发起的运行；`{{...}}` 内容占位符与系统变量 `{...}` 互不侵犯
-- 契约台账：contract §1~§5 测试锁定点对应 T283/T291；§6~§7 对应 T279；§8 对应 T285/T286/T289/T292；§9 的 001 契约同步归 T294
+- 已知共享文件顺序触碰（勿并行）：`core/prompts/registry.py`（T279 → 只读引用）、`core/prompts/store.py`（T281 → **T297 重写** → T283/T284/T288/T291 只读）、`api/routes/ai.py` 与 `tests/contract/test_ai_prompts_api.py`（T283 → **T298 重写** → T291 增补）、`components/common/PromptEditorDialog.vue` 与 `prompt-editor-dialog.test.ts`（T285 → **T299 重写** → T292 增补）、`src/api/types.ts`+`prompts.ts`（T282 → T299 适配）、`AiExpandDialog.vue`（T286 → T300）、`AiContentDialog.vue`（T289；另有 005 在途改动，T278 纪律先行）
+- 语义纪律（全部落于契约与 data-model）：可编辑的是业务指令模板，`{output_contract}` 槽位与固定段**永不可改**（缺失自动补尾——解析性不破坏）；**内置默认不可改不可删**，默认态保存必须引导另存为（FR-015）；**选择即生效**（切换 ≤2 操作），删除生效模板服务端自动回退默认；辅助**不落库**、采用≠保存（FR-010）；辅助与运行同口径入 `llm_call`（含用量）；模板变更只影响其后新发起的运行；`{{...}}` 内容占位符与系统变量 `{...}` 互不侵犯
+- 契约台账：contract §1~§4（模板库）测试锁定点对应 T298；§5 对应 T291；§6~§7 对应 T279；§8 对应 T299/T300/T289/T292；§9 的 001 契约同步归 T294（端点清单已按模板库版更新）
 - 避免：模糊任务、同文件并行冲突、破坏故事独立性的跨故事依赖（US2/US3 仅依赖 US1 的组件接口与共享端点，不得反向依赖；golden 基准函数只存在于测试文件，生产代码不保留死路径）

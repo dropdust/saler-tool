@@ -1,8 +1,8 @@
-# Phase 1 Contract: AI 提示词自定义与辅助编写——模板、校验与辅助调用约定
+# Phase 1 Contract: AI 提示词自定义与辅助编写——模板库、校验与辅助调用约定
 
-**Feature**: `006-ai-prompt-customization` | **Date**: 2026-10-16 | 关联：[local-api.md](../../001-sales-tool/contracts/local-api.md)（§AI 节按 §9 同步增补）与 [prompt-customization 数据模型](../data-model.md)
+**Feature**: `006-ai-prompt-customization` | **Date**: 2026-10-16（当日修订：单份模板 → 模板库，用户澄清） | 关联：[local-api.md](../../001-sales-tool/contracts/local-api.md)（§AI 节按 §9 同步增补）与 [prompt-customization 数据模型](../data-model.md)
 
-本文件定义本特性的接口增量：模板读取/保存/恢复、AI 辅助、校验与警告码表、组合渲染与前端呈现约定。**全部为新增端点**（不改动既有端点行为）；错误一律沿用 `{code, message, details}` 包。
+本文件定义本特性的接口增量：模板库读取/创建/更新/删除/生效切换、AI 辅助、校验与警告码表、组合渲染与前端呈现约定。**全部为新增端点**（不改动既有端点行为）；错误一律沿用 `{code, message, details}` 包。旧单份端点（`PUT /ai/prompts/{feature}`、`POST …/reset`）**从未发布**，由本版替换，无兼容负担。
 
 ---
 
@@ -11,76 +11,100 @@
 | 项 | 约定 |
 | --- | --- |
 | 用途 | 两个对话框打开时取状态徽标 |
-| 响应 | `{ "items": [ {feature, label, customized, updated_at} ] }`，恰 2 项，顺序固定 `seed_expand` → `content_draft` |
+| 响应 | `{ "items": [ {feature, label, customized, active_id, active_name, template_count} ] }`，恰 2 项，顺序固定 `seed_expand` → `content_draft` |
 
 ```jsonc
 // → 200
 { "items": [
-  { "feature": "seed_expand", "label": "AI 扩充（种子扩充）", "customized": true,  "updated_at": "2026-10-16T09:12:00" },
-  { "feature": "content_draft", "label": "AI 起草（内容母版）", "customized": false, "updated_at": null }
+  { "feature": "seed_expand", "label": "AI 扩充（种子扩充）", "customized": true,
+    "active_id": "t_9f3a", "active_name": "东非市场", "template_count": 2 },
+  { "feature": "content_draft", "label": "AI 起草（内容母版）", "customized": false,
+    "active_id": null, "active_name": null, "template_count": 0 }
 ] }
 ```
 
-## 2. `GET /api/v1/ai/prompts/{feature}`（模板详情）
+## 2. `GET /api/v1/ai/prompts/{feature}`（模板库详情）
 
 | 项 | 约定 |
 | --- | --- |
 | `{feature}` 未知 | **404 `not_found`** |
-| 响应 | 编辑器全量数据（含默认模板供对照/恢复） |
+| 响应 | 编辑器全量数据：库内全部模板（含全文）+ 默认模板 + 生效选择 |
 
 ```jsonc
 // GET /api/v1/ai/prompts/seed_expand → 200
 {
   "feature": "seed_expand",
   "label": "AI 扩充（种子扩充）",
-  "content": "你是 B2B 外贸获客的市场调研助手。……{description}\n{existing_nodes}\n{output_contract}\n要求：seeds 约 {count} 条……",
   "default_content": "……（内置默认模板全文，含 {output_contract} 槽位）",
-  "customized": true,
-  "updated_at": "2026-10-16T09:12:00",
+  "active_id": "t_9f3a",            // null = 生效为内置默认
+  "active_name": "东非市场",         // active_id 为空时 null
+  "customized": true,               // = active_id 非空且指向存在的模板
   "max_length": 8000,
+  "max_name_length": 60,
+  "max_templates": 50,
+  "templates": [
+    { "id": "t_9f3a", "name": "东非市场", "content": "你是……{description}……", "updated_at": "2026-10-16T09:12:00" },
+    { "id": "t_77b1", "name": "展会渠道", "content": "……", "updated_at": "2026-10-16T09:20:00" }
+  ],
   "variables": [
     { "name": "description",     "label": "业务描述",   "render": "有值 →「业务描述：…」；未填 → 空" },
     { "name": "existing_nodes",  "label": "已有节点名单", "render": "按产品线/客户角色/市场逐行「已有X：A、B」；无 → 空" },
     { "name": "count",           "label": "候选数量",   "render": "纯数字（表单值）" }
   ],
-  "output_contract": "输出 JSON，结构：\n- nodes[]: ……",
   "reserved_variables": [
     { "name": "output_contract", "label": "输出结构槽位", "render": "替换为上方固定段原文（不可修改；缺失时运行时自动补于末尾）" }
-  ]
+  ],
+  "output_contract": "输出 JSON，结构：\n- nodes[]: ……"
 }
 ```
 
 - `variables` 与 `reserved_variables` 的区分即"可编辑数据变量"与"保留槽位"；`render` 文本直接展示给用户（"将被替换为…"）。
 - `content_draft` 的 `variables` 为 `brief / tone / content_type / language`，`output_contract` 为输出行原文。
 
-## 3. `PUT /api/v1/ai/prompts/{feature}`（保存模板）
+## 3. 模板写入组（创建/更新/删除）
+
+### 3a. `POST /api/v1/ai/prompts/{feature}/templates`（创建/另存为）
 
 | 项 | 约定 |
 | --- | --- |
-| 请求 | `{ "content": "<模板文本>" }` |
-| 成功 | **200**：响应 = 详情形状（§2）+ `"warnings": [ {code, message} ]`；`customized` 置 `true` |
-| 阻断 | 空/纯空白 → **400 `bad_request`**「提示词不能为空」；> `max_length` → **400 `bad_request`**（消息含额度与当前长度）；未知 feature → 404 |
-| 警告 | 见 §7 码表；**不阻断**，随成功响应返回，前端在保存后照常提示 |
-| 持久化 | 写 `app_setting[prompt_template_{feature}] = {"content": …}`（行不存在则插入） |
-| 生效范围 | 仅其后新发起的运行；进行中的运行不受影响（FR-007） |
+| 请求 | `{ "name": "<名称>", "content": "<模板文本>", "activate": true }`（`activate` 缺省 `true`=创建即生效） |
+| 成功 | **201**：详情形状（§2）+ `"warnings": [ {code, message} ]` |
+| 校验 | 内容规则（§7）同前；名称 strip 后必填、≤ `max_name_length`、同功能内不得重名；库满（≥ `max_templates`）→ 400 |
+| 阻断 | 全部为 **400 `bad_request`**（消息说明具体原因）；未知 feature → 404 |
+| 警告 | §7 码表；不阻断（名称类问题为阻断，变量类为警告） |
 
 ```jsonc
-// PUT /api/v1/ai/prompts/seed_expand  {"content": "你是……{count}……"} → 200（节选）
-{ "feature": "seed_expand", "customized": true, "content": "……",
-  "warnings": [
-    { "code": "missing_output_contract", "message": "未包含 {output_contract} 输出结构槽位：运行时会自动补充在末尾" },
-    { "code": "missing_variable", "message": "未引用 {description}：表单中的业务描述将不再发送给模型" }
-  ] }
+// POST → 201（节选）
+{ "feature": "seed_expand", "active_id": "t_9f3a", "active_name": "东非市场", "customized": true,
+  "templates": [ { "id": "t_9f3a", "name": "东非市场", "content": "……", "updated_at": "……" } ],
+  "warnings": [] }
 ```
 
-## 4. `POST /api/v1/ai/prompts/{feature}/reset`（恢复默认）
+### 3b. `PUT /api/v1/ai/prompts/{feature}/templates/{id}`（更新内容 / 重命名）
 
 | 项 | 约定 |
 | --- | --- |
-| 请求体 | 无 |
-| 成功 | **200**：详情形状（§2），`customized=false`、`content=default_content`、`updated_at=null`；实现 = 删除 `app_setting` 行 |
-| 语义 | 立即生效：下一次运行即用默认模板；编辑器同步呈现默认内容 |
-| 幂等 | 对已是默认的功能再次调用同样返回 200（无副作用） |
+| 请求 | `{ "content"?: "…", "name"?: "…" }`（至少一项；缺省字段不变） |
+| 成功 | **200**：详情 + `warnings`；重命名与内容更新可同请求完成 |
+| 阻断 | 与 3a 同（含重名）；`id` 不属于该功能或不存在 → **404 `not_found`** |
+| 生效 | 若更新的是生效模板 → 下一次运行即用新内容；未生效模板更新不影响当前运行模板 |
+
+### 3c. `DELETE /api/v1/ai/prompts/{feature}/templates/{id}`
+
+| 项 | 约定 |
+| --- | --- |
+| 成功 | **200**：详情形状（§2）；**若删除的是生效模板 → `active_id` 自动置 `null`（回退内置默认，服务端行为）** |
+| 阻断 | `id` 不存在/不属于该功能 → 404；内置默认不可删除（不在 `templates` 列表内，无此 id） |
+
+## 4. `PUT /api/v1/ai/prompts/{feature}/active`（切换生效 / 恢复默认）
+
+| 项 | 约定 |
+| --- | --- |
+| 请求 | `{ "id": "<模板 id>" }` 或 `{ "id": null }`（null = 切回内置默认；"恢复默认"即此调用） |
+| 成功 | **200**：详情形状（§2）；`customized` 相应更新 |
+| 阻断 | `id` 非空但不存在/不属于该功能 → **404 `not_found`**；未知 feature → 404 |
+| 语义 | 立即生效：下一次运行即用所选模板；已保存模板全部保留（切回默认 ≠ 删除）；幂等 |
+| 生效范围 | 仅其后新发起的运行；进行中的运行不受影响（FR-007） |
 
 ## 5. `POST /api/v1/ai/prompts/{feature}/assist`（AI 辅助编写）
 
@@ -127,10 +151,12 @@
 
 | 项 | 约定 |
 | --- | --- |
-| 入口 | AI 扩充对话框、AI 起草（起草/润色母版页签）各增「提示词」入口；入口旁徽标显示「默认 / 已自定义」（`GET /ai/prompts`，对话框打开时取） |
-| 编辑器 | 共享组件：模板文本域（实时长度/剩余额度）、变量面板（名称+渲染语义，可点击插入光标处）、固定段只读块（在槽位位置呈现"此处将替换为…"）、保存 / 恢复默认（二次确认）/ 关闭（脏状态确认放弃） |
-| 状态呈现 | 标题旁「默认 / 已自定义」；恢复默认确认后即刷新为默认全文 |
-| 保存流 | 预检警告 → 确认框 → PUT → 成功提示 + 响应 warnings（若有）逐条以 warning 提示；失败走统一错误包 |
+| 入口 | AI 扩充对话框、AI 起草（起草/润色母版页签）各增「提示词」入口；入口旁徽标显示「默认」或生效模板名（`GET /ai/prompts`，对话框打开时取；取数失败不显示不打断） |
+| 编辑器 | 共享组件：模板选择器（「内置默认」+ 各具名模板；**选择即生效**，即时调 §4）+ 模板文本域（实时长度/剩余额度）+ 变量面板（名称+渲染语义，可点击插入光标处）+ 固定段只读块（在槽位位置呈现"此处将替换为…"） |
+| 模板操作 | 「另存为」（命名输入 → §3a，创建即生效）；「重命名」（仅具名模板）；「删除」（仅具名模板，二次确认；删除生效模板由服务端回退默认）；「恢复默认」= 切换生效为 null（二次确认，保留模板库） |
+| 切换与脏状态 | 切换模板/关闭编辑器/另存为时若有未保存修改 → 确认放弃；切换成功后文本域载入所选模板全文 |
+| 保存流 | 当前生效为具名模板：预检警告 → 确认框 → §3b → 成功提示 + 响应 warnings 逐条提示。当前为内置默认：「保存」引导另存为（名称输入 → §3a，创建并生效，FR-015）；失败走统一错误包且内容不丢 |
+| 状态呈现 | 标题旁徽标与选择器同步呈现「默认 / 模板名」；各操作成功后即时刷新 |
 | AI 辅助区 | 意图输入 +「AI 生成」；对当前草稿「AI 优化」；请求期间 loading 且不影响文本编辑；建议区展示 `suggestion` 全文与 `notes`，「采用 / 丢弃」；**绝不自动写入或保存** |
 | 辅助追溯 | 辅助完成后提供「查看调用明细」（抽屉 `operation=prompt_assist`），与运行类明细同呈现 |
 | 未配置指引 | assist 409 `llm_not_configured` → 编辑器内提示 + 跳转「设置 → 大模型」；编辑器查看/编辑/保存不受影响（FR-012） |
@@ -138,4 +164,4 @@
 
 ## 9. `local-api.md` 同步说明
 
-本契约 §1–§5 四个新增端点（`GET /ai/prompts`、`GET/PUT /ai/prompts/{feature}`、`POST …/reset`、`POST …/assist`）与 `llm_call.operation` 新取值 `prompt_assist` 由 `/speckit-tasks` 生成"契约同步"任务增补至 001 `local-api.md` 的 §AI 节；不修改既有行。
+本契约 §1–§5 新增端点（`GET /ai/prompts`、`GET /ai/prompts/{feature}`、`POST/PUT/DELETE …/templates[/{id}]`、`PUT …/active`、`POST …/assist`）与 `llm_call.operation` 新取值 `prompt_assist` 由 `/speckit-tasks` 生成"契约同步"任务增补至 001 `local-api.md` 的 §AI 节；不修改既有行。
