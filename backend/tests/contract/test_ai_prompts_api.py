@@ -221,3 +221,89 @@ class TestIndependence:
         client.put("/api/v1/ai/prompts/content_draft/active", json={"id": None})
         seed = client.get("/api/v1/ai/prompts/seed_expand").json()
         assert seed["active_name"] == "东非市场"
+
+
+class TestPromptAssist:
+    """T291（006 契约 §5）：AI 辅助——generate/polish、参数 400 系列、未配置 409、调用明细。"""
+
+    def _fake_provider(self, monkeypatch, item: dict):
+        from tests.fixtures.fakes.llm_fake import FakeLLMProvider
+
+        provider = FakeLLMProvider(script=[item])
+        monkeypatch.setattr(
+            "saler.api.routes.ai.resolve_llm_provider",
+            lambda db, provider_id=None: provider,
+        )
+        return provider
+
+    def test_generate_success_shape_and_call_log(self, client, monkeypatch):
+        provider = self._fake_provider(
+            monkeypatch, {"suggestion": "候选模板 {description} {output_contract}", "notes": "保留变量"}
+        )
+        resp = client.post(
+            "/api/v1/ai/prompts/seed_expand/assist",
+            json={"mode": "generate", "intent": "面向东非市场，重点发掘各国电力公司"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["suggestion"] == "候选模板 {description} {output_contract}"
+        assert body["notes"] == "保留变量"
+
+        # 辅助提示词：意图 + 变量目录 + 固定段纪律都到达模型
+        prompt = provider.calls[0]["prompt"]
+        assert "面向东非市场，重点发掘各国电力公司" in prompt
+        assert "{description}" in prompt and "output_contract" in prompt
+        assert "AI 扩充（种子扩充）" in prompt
+
+        # 调用明细：operation=prompt_assist、job_id=NULL、start→finish 原位收口为一行
+        calls = client.get("/api/v1/ai/calls", params={"operation": "prompt_assist"}).json()
+        assert calls["total"] == 1
+        row = calls["items"][0]
+        assert row["operation"] == "prompt_assist"
+        assert row["job_id"] is None
+        assert row["ok"] is True
+        assert "候选模板" in (row["response_text"] or "")
+        assert "面向东非市场" in row["request_messages"][-1]["content"]
+
+    def test_polish_uses_draft_text(self, client, monkeypatch):
+        provider = self._fake_provider(monkeypatch, {"suggestion": "优化后模板", "notes": None})
+        resp = client.post(
+            "/api/v1/ai/prompts/content_draft/assist",
+            json={"mode": "polish", "draft": "你是文案专家。{brief} 原始草稿文本"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["suggestion"] == "优化后模板"
+        assert resp.json()["notes"] is None
+        prompt = provider.calls[0]["prompt"]
+        assert "你是文案专家。{brief} 原始草稿文本" in prompt
+        assert "AI 起草（内容母版）" in prompt
+
+    def test_bad_requests_400(self, client, monkeypatch):
+        self._fake_provider(monkeypatch, {"suggestion": "x"})
+        bad_payloads = (
+            {"mode": "nope"},
+            {"mode": "generate"},
+            {"mode": "generate", "intent": "   "},
+            {"mode": "polish"},
+            {"mode": "polarish", "draft": "x"},
+            {"mode": "generate", "intent": "x" * 2001},
+            {"mode": "polish", "draft": "x" * 8001},
+        )
+        for payload in bad_payloads:
+            resp = client.post("/api/v1/ai/prompts/seed_expand/assist", json=payload)
+            assert resp.status_code == 400, (payload, resp.text)
+            assert resp.json()["code"] == "bad_request"
+
+    def test_unknown_feature_404(self, client):
+        resp = client.post(
+            "/api/v1/ai/prompts/nope/assist", json={"mode": "generate", "intent": "x"}
+        )
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "not_found"
+
+    def test_not_configured_409(self, client):
+        resp = client.post(
+            "/api/v1/ai/prompts/seed_expand/assist", json={"mode": "generate", "intent": "x"}
+        )
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "llm_not_configured"

@@ -65,12 +65,20 @@ class ContentTranslationV1(BaseModel):
     body_md: str
 
 
+class PromptAssistV1(BaseModel):
+    """AI 辅助编写提示词（006 契约 §5）：suggestion=完整候选模板文本；notes=修改要点（可空）。"""
+
+    suggestion: str
+    notes: str | None = None
+
+
 # ---- JSON Schema 产物（供适配器 generate_structured 校验） ----
 
 SEED_EXPANSION_V1_SCHEMA = SeedExpansionV1.model_json_schema(by_alias=True)
 SEED_TRANSLATION_V1_SCHEMA = SeedTranslationV1.model_json_schema()
 CONTENT_DRAFT_V1_SCHEMA = ContentDraftV1.model_json_schema()
 CONTENT_TRANSLATION_V1_SCHEMA = ContentTranslationV1.model_json_schema()
+PROMPT_ASSIST_V1_SCHEMA = PromptAssistV1.model_json_schema()
 
 # 通用"字符串数组"schema（translate 批量返回）
 TRANSLATION_LIST_SCHEMA: dict = {

@@ -18,6 +18,7 @@ from saler.core.content.ai import run_content_draft, run_content_translate
 from saler.core.errors import ValidationFailed
 from saler.core.llm_utils import resolve_llm_provider
 from saler.core.prompts import registry, store
+from saler.core.prompts.assist import run_prompt_assist
 from saler.core.seeds.ai import run_expansion
 from saler.core.seeds.ai_translate import run_translate_seeds, run_translate_terms
 from saler.providers.llm import call_log
@@ -301,3 +302,49 @@ def activate_prompt_template(
     spec = _require_feature(feature)
     store.activate(db, spec.key, payload.id)
     return _prompt_detail(db, spec)
+
+
+class PromptAssistRequest(BaseModel):
+    mode: str
+    intent: str | None = None
+    draft: str | None = None
+
+
+@router.post("/prompts/{feature}/assist")
+def assist_prompt(
+    feature: str,
+    payload: PromptAssistRequest,
+    request: Request,
+    db: Session = Depends(get_session),
+) -> dict:
+    """AI 辅助编写（契约 §5）：同步调用（线程池），建议不入库。
+
+    - 参数违规 → 400 `bad_request`；未配置服务 → 409 `llm_not_configured`（既有门控）；
+    - 调用经 `run_prompt_assist` 落 llm_call 明细（operation=prompt_assist、job_id=NULL）。
+    """
+    spec = _require_feature(feature)
+    if payload.mode not in ("generate", "polish"):
+        raise bad_request("mode 仅支持 generate / polish")
+    if payload.mode == "generate":
+        intent = (payload.intent or "").strip()
+        if not intent:
+            raise bad_request("generate 模式需要提供 intent")
+        if len(intent) > 2000:
+            raise bad_request("intent 过长（上限 2000 字符）")
+        draft = None
+    else:
+        draft = (payload.draft or "").strip()
+        if not draft:
+            raise bad_request("polish 模式需要提供 draft")
+        if len(draft) > registry.MAX_TEMPLATE_LENGTH:
+            raise bad_request(f"draft 过长（上限 {registry.MAX_TEMPLATE_LENGTH} 字符）")
+        intent = None
+    provider = resolve_llm_provider(db, None)
+    return run_prompt_assist(
+        request.app.state.session_factory,
+        provider,
+        feature=spec.key,
+        mode=payload.mode,
+        intent=intent,
+        draft=draft,
+    )
