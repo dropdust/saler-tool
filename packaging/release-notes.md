@@ -15,3 +15,5 @@
 首次启动自动建库（数据目录：Windows `%LOCALAPPDATA%\saler-tool`；macOS `~/Library/Application Support/saler-tool`；Linux `~/.local/share/saler-tool`）。
 
 > 说明：macOS 签名/公证与 Windows 代码签名将在证书就绪后启用（见 `packaging/installers/`）。
+
+交流与反馈：QQ 群「外贸获客工具」`1128098127`（[二维码](https://github.com/dropdust/saler-tool/blob/main/docs/qqgroup.jpg)）｜作者微信（[二维码](https://github.com/dropdust/saler-tool/blob/main/docs/wx.png)）｜问题与建议请提 [Issues](https://github.com/dropdust/saler-tool/issues)。

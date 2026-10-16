@@ -39,6 +39,7 @@
           <el-menu-item index="/settings/search">检索渠道</el-menu-item>
           <el-menu-item index="/settings/suppressions">退订黑名单</el-menu-item>
           <el-menu-item index="/settings/backup">备份与数据</el-menu-item>
+          <el-menu-item index="/settings/about">关于与联系</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

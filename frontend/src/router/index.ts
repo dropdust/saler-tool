@@ -158,6 +158,12 @@ const router = createRouter({
           component: () => import('../views/settings/Suppressions.vue'),
           meta: { title: '退订黑名单' },
         },
+        {
+          path: 'settings/about',
+          name: 'settings-about',
+          component: () => import('../views/settings/About.vue'),
+          meta: { title: '关于与联系' },
+        },
       ],
     },
   ],
