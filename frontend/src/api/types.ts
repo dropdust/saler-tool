@@ -436,3 +436,46 @@ export interface SuppressionRow {
   note: string | null
   created_at: string | null
 }
+
+// ---- AI 提示词（006；contracts/prompt-customization-contract.md §1~§5） ----
+
+export type PromptFeatureKey = 'seed_expand' | 'content_draft'
+
+export interface PromptVariable {
+  name: string
+  label: string
+  /** 渲染语义说明（"将被替换为…"），直接展示给用户 */
+  render: string
+}
+
+export interface PromptTemplateSummary {
+  feature: PromptFeatureKey
+  label: string
+  customized: boolean
+  updated_at: string | null
+}
+
+export interface PromptWarning {
+  code: string
+  message: string
+}
+
+export interface PromptTemplateDetail {
+  feature: PromptFeatureKey
+  label: string
+  content: string
+  default_content: string
+  customized: boolean
+  updated_at: string | null
+  max_length: number
+  variables: PromptVariable[]
+  reserved_variables: PromptVariable[]
+  output_contract: string
+  /** 仅保存（PUT）响应携带：不阻断保存的警告（contract §7 码表） */
+  warnings?: PromptWarning[]
+}
+
+export interface PromptAssistResponse {
+  suggestion: string
+  notes: string | null
+}
