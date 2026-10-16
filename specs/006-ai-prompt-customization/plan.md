@@ -14,7 +14,7 @@
 
 **Primary Dependencies**: FastAPI + SQLAlchemy（SQLite）｜Element Plus + Pinia + Vue Router；LLM 复用既有 `OpenAICompatibleProvider`（**零新增依赖**）
 
-**Storage**: 复用 `app_setting` KV（`prompt_template_seed_expand` / `prompt_template_content_draft`，行存在=已自定义）；调用留痕复用 `llm_call`（新增 `operation="prompt_assist"` 取值）；无迁移
+**Storage**: 复用 `app_setting` KV（`prompt_templates_seed_expand` / `prompt_templates_content_draft`，值为模板库 `{active_id, items[]}`；`active_id=null` 即生效为内置默认）；调用留痕复用 `llm_call`（新增 `operation="prompt_assist"` 取值）；无迁移
 
 **Testing**: 后端 pytest（unit / contract / integration，FakeLLMProvider 离线可跑）；前端 vitest + @vue/test-utils（Element Plus + mock api 客户端）
 
@@ -26,7 +26,7 @@
 
 **Constraints**: 模板上限 8000 字符；默认路径提示词逐字等价（SC-002 回归口径）；辅助必须落调用明细（FR-011）；未配置模型时编辑器全功能可用、辅助给出配置指引（FR-012）
 
-**Scale/Scope**: 单用户本机；2 功能 × 1 模板；新增 ≈4 个 API 端点 + 1 个后端领域模块 + 1 个前端共享组件
+**Scale/Scope**: 单用户本机；2 功能 ×（内置默认 + 具名模板库，各 ≤50 份）；新增 6 个 API 端点（列表/详情/模板 CRUD/生效切换/辅助）+ 1 个后端领域模块（registry/store/assist）+ 1 个前端共享组件
 
 ## Constitution Check
 
@@ -70,25 +70,28 @@ backend/
 │   ├── core/prompts/
 │   │   ├── __init__.py
 │   │   ├── registry.py            # 功能注册表：默认模板/固定段/变量元数据/渲染语义/组合/校验（纯函数）
+│   │   ├── store.py               # 模板库：list/effective/create/update/delete/activate（app_setting KV）
 │   │   └── assist.py              # AI 辅助：辅助提示词构建 + 经 provider 调用（同步路由调用点）
-│   ├── core/seeds/ai.py           # run_expansion：改经 registry 组合（读设置覆盖，替代硬编码 build_expansion_prompt）
+│   ├── core/seeds/ai.py           # run_expansion：改经 registry 组合（读生效模板，替代硬编码 build_expansion_prompt）
 │   ├── core/content/ai.py         # run_content_draft：同上（替代 _build_draft_prompt）
-│   ├── api/routes/ai.py           # + GET /ai/prompts、GET/PUT /ai/prompts/{feature}、POST …/reset、POST …/assist
-│   ├── api/routes/settings.py     # 通用 PUT /settings 拒绝 prompt_template_* 键
-│   ├── services/settings_service.py   # + delete_value（恢复默认=删行）
+│   ├── api/routes/ai.py           # + GET /ai/prompts、GET /ai/prompts/{feature}、POST/PUT/DELETE …/templates[/{id}]、PUT …/active、POST …/assist
+│   ├── api/routes/settings.py     # 通用 PUT /settings 拒绝 prompt_template* 键（域校验守卫）
 │   └── providers/llm/schemas.py   # + PROMPT_ASSIST_V1_SCHEMA（{suggestion, notes}）
 └── tests/
     ├── unit/test_prompt_registry.py        # 渲染语义/golden 等价/校验警告/槽位兜底
+    ├── unit/test_prompt_store.py           # 模板库规则：名称/容量/切换/删除回退/脏数据防御
+    ├── unit/test_content_ai.py             # 起草管线（生效模板 + 变量渲染两态）
     ├── contract/test_ai_prompts_api.py     # §1~§5 端点契约 + llm_call 落行 + 409 门控
     └── unit/test_seed_ai.py 等更新          # 自定义模板在运行中生效的断言
 
 frontend/
-├── src/components/common/PromptEditorDialog.vue   # 共享编辑器（模板/变量面板/只读固定块/辅助区）
-├── src/views/seeds/AiExpandDialog.vue             # +「提示词」入口与默认/已自定义徽标
-├── src/views/content/AiContentDialog.vue          # 起草页签 + 同款入口
-├── src/api/types.ts                               # 模板详情/列表/警告类型
+├── src/components/common/PromptEditorDialog.vue   # 共享编辑器（模板库选择/变量面板/只读固定块/辅助区）
+├── src/views/seeds/AiExpandDialog.vue             # +「提示词」入口与「默认/生效模板名」徽标
+├── src/views/content/AiContentDialog.vue          # 起草页签 + 同款入口与徽标
+├── src/api/types.ts                               # 模板库详情/列表/警告/辅助类型
+├── src/api/prompts.ts                             # 端点薄封装（模板库 CRUD/生效切换 + 辅助）
 └── tests/
-    ├── prompt-editor-dialog.test.ts               # 编辑器交互（保存预检/恢复/建议采用/409 指引）
+    ├── prompt-editor-dialog.test.ts               # 编辑器交互（选择即生效/另存为/删除回退/采用不保存/409 指引）
     └── ai-expand-calls-entry.test.ts 等增补        # 两对话框入口与徽标
 ```
 
