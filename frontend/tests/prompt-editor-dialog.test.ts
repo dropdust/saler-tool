@@ -265,6 +265,15 @@ describe('PromptEditorDialog 保存（具名=更新；默认态=另存为引导�
     expect(createMock).not.toHaveBeenCalled()
   })
 
+  it('超长阻断（T296 边界）：计数器变红、不发请求（额度提示）', async () => {
+    const wrapper = await mountAndOpen(ACTIVE_A)
+    await setTextarea(wrapper, 'x'.repeat(8001))
+    expect(btn('prompt-counter').classList.contains('over')).toBe(true)
+    await click('prompt-save')
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(createMock).not.toHaveBeenCalled() // 也走不到「另存为」引导
+  })
+
   it('保存失败（服务端 400）：保留编辑内容并复位在途状态', async () => {
     vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
     updateMock.mockRejectedValue(new Error('bad_request'))

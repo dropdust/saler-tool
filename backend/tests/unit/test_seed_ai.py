@@ -130,6 +130,45 @@ async def test_expansion_default_path_composes_registry_default(session_factory)
     assert provider.calls[0]["prompt"] == expected
 
 
+async def test_expansion_prompt_snapshot_isolated_from_midrun_switch(session_factory):
+    """T296 边界：运行开始时定格的提示词快照——运行中切换生效模板不影响在途运行。
+
+    在模型调用进行中（provider.generate_structured 内部）新建并切换生效模板，
+    在途 prompt 必须仍为开始时的快照；下一次运行才使用新模板（FR-007/契约 §6）。
+    """
+    from saler.core.prompts import store
+
+    with session_factory() as db:
+        store.create(
+            db,
+            "seed_expand",
+            name="A 版",
+            content="A 指令 {description} {existing_nodes} {count} {output_contract}",
+        )
+
+    provider = FakeLLMProvider()
+    original = provider.generate_structured
+
+    def generate_with_switch(*, prompt: str, **kwargs):
+        with session_factory() as db:
+            store.create(
+                db,
+                "seed_expand",
+                name="B 版",
+                content="B 指令 {description} {existing_nodes} {count} {output_contract}",
+            )
+        return original(prompt=prompt, **kwargs)
+
+    provider.generate_structured = generate_with_switch  # type: ignore[method-assign]
+    await run_expansion(_Ctx(), session_factory, provider, payload={"description": "X", "count": 3})
+    assert provider.calls[0]["prompt"].startswith("A 指令")  # 在途快照不受切换影响
+
+    # 下一次运行使用新生效模板（B 版）
+    provider2 = FakeLLMProvider()
+    await run_expansion(_Ctx(), session_factory, provider2, payload={"description": "X", "count": 3})
+    assert provider2.calls[0]["prompt"].startswith("B 指令")
+
+
 async def test_translate_seeds_creates_pending_variants_with_glossary(session_factory):
     with session_factory() as db:
         product_line = graph_service.create_node(db, node_type="product_line", name="金具")
