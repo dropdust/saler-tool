@@ -81,10 +81,10 @@ description: "Task list for 统一任务中心与任务后台化"
 
 ### Tests for User Story 2 ⚠️（先写，确认失败）
 
-- [ ] T238 [US2] 任务运行面板组件（红→绿，依赖 T231）：新建 `frontend/src/components/common/JobRunPanel.vue`——进行中视图通用件：状态标签 + 进度条/阶段文案（`store.progressView`）+ 日志尾部（store 缓冲）+ 「取消任务」+ 常驻提示"关闭本窗口不会中断任务，进度可在任务中心查看"（转入后台语义说明）；新建 `frontend/tests/dialog-background.test.ts` 起始用例（面板渲染三分支：进行中/刚完成/失败）→ **红→绿**
-- [ ] T239 [US2] AI 扩充对话框（红→绿，依赖 T238）：`frontend/src/views/seeds/AiExpandDialog.vue`——`open()` 时 `store.activeJobOfType('ai_seed_expand')` 命中 → 渲染 `JobRunPanel`（不再出现表单与「开始扩充」）；未命中渲染既有表单；提交后 `store.register`，等待经 `store.waitFor`（留在框内体验不变：进度与结果汇总照常呈现）；扩展 `frontend/tests/dialog-background.test.ts`——重开呈现进行中态、无重复提交面、关闭后任务登记仍在、完成后汇总呈现（FR-009/011/012/013）→ **红→绿**
-- [ ] T240 [US2] 种子翻译对话框（红→绿，依赖 T238）：`frontend/src/views/seeds/SeedList.vue` 翻译对话框同法改造（`ai_seed_translate`）；扩展测试（同 T239 口径）→ **红→绿**
-- [ ] T241 [US2] 内容对话框（红→绿，依赖 T238）：`frontend/src/views/content/AiContentDialog.vue` 两个动作（`ai_content_draft`/`ai_content_translate`）同法改造（同一组件按动作类型判定）；扩展测试（两动作各自重开呈现进行中态）→ **红→绿**
+- [X] T238 [US2] 任务运行面板组件（红→绿，依赖 T231）：新建 `frontend/src/components/common/JobRunPanel.vue`——进行中视图通用件：状态标签 + 进度条/阶段文案（`store.progressView`）+ 日志尾部（store 缓冲）+ 「取消任务」+ 常驻提示"关闭本窗口不会中断任务，进度可在任务中心查看"（转入后台语义说明）；新建 `frontend/tests/dialog-background.test.ts` 起始用例（面板渲染三分支：进行中/刚完成/失败）→ **红→绿**（2026-10-16 实作）
+- [X] T239 [US2] AI 扩充对话框（红→绿，依赖 T238）：`frontend/src/views/seeds/AiExpandDialog.vue`——`open()` 时 `store.activeJobOfType('ai_seed_expand')` 命中 → 渲染 `JobRunPanel`（不再出现表单与「开始扩充」）；未命中渲染既有表单；提交后 `store.register`，等待经 `store.waitFor`（留在框内体验不变：进度与结果汇总照常呈现）；扩展 `frontend/tests/dialog-background.test.ts`——重开呈现进行中态、无重复提交面、关闭后任务登记仍在、完成后汇总呈现（FR-009/011/012/013）→ **红→绿**（2026-10-16 实作；`ai-expand-calls-entry.test.ts` T269/T271 用例同步迁移至 store 驱动）
+- [X] T240 [US2] 种子翻译对话框（红→绿，依赖 T238）：`frontend/src/views/seeds/SeedList.vue` 翻译对话框同法改造（`ai_seed_translate`）；扩展测试（同 T239 口径）→ **红→绿**（2026-10-16 实作）
+- [X] T241 [US2] 内容对话框（红→绿，依赖 T238）：`frontend/src/views/content/AiContentDialog.vue` 两个动作（`ai_content_draft`/`ai_content_translate`）同法改造（同一组件按动作类型判定）；扩展测试（两动作各自重开呈现进行中态）→ **红→绿**（2026-10-16 实作；`watchJob` 随存量调用点清零自 `api/jobs.ts` 删除）
 
 ### Implementation for User Story 2
 

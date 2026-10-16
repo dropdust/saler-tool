@@ -187,33 +187,39 @@
     </el-dialog>
 
     <el-dialog v-model="translateVisible" title="翻译种子（结果进入待审核）" width="520px">
-      <p class="hint">
-        将对选中的 {{ selected.length }} 条种子执行大模型翻译（建议选择中文种子）。
-        产出为待审核状态，采纳后方可导出执行。
-      </p>
-      <el-select v-model="translateTargets" multiple style="width: 100%" placeholder="选择目标语言">
-        <el-option v-for="l in LANGS" :key="l.code" :value="l.code" :label="`${l.label}（${l.code}）`" />
-      </el-select>
+      <!-- 进行中视图（T240/FR-011）：重开命中同类活跃任务时呈现，杜绝重复提交面 -->
+      <JobRunPanel v-if="translatePanelMode && translateJob" :job="translateJob" />
+      <template v-else>
+        <p class="hint">
+          将对选中的 {{ selected.length }} 条种子执行大模型翻译（建议选择中文种子）。
+          产出为待审核状态，采纳后方可导出执行。
+        </p>
+        <el-select v-model="translateTargets" multiple style="width: 100%" placeholder="选择目标语言">
+          <el-option v-for="l in LANGS" :key="l.code" :value="l.code" :label="`${l.label}（${l.code}）`" />
+        </el-select>
+      </template>
       <template #footer>
-        <el-button @click="translateVisible = false">取消</el-button>
-        <el-button type="primary" :loading="translating" @click="doTranslate">开始翻译</el-button>
+        <el-button @click="translateVisible = false">{{ translatePanelMode ? '关闭' : '取消' }}</el-button>
+        <el-button v-if="!translatePanelMode" type="primary" :loading="translating" @click="doTranslate">开始翻译</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
-import type { GraphNode, Paginated, Seed } from '../../api/types'
+import { TERMINAL_STATUSES } from '../../api/jobs'
+import type { GraphNode, JobPayload, Paginated, Seed } from '../../api/types'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatusTag from '../../components/common/StatusTag.vue'
+import JobRunPanel from '../../components/common/JobRunPanel.vue'
 import AiExpandDialog from './AiExpandDialog.vue'
 import { LANGS, PRIORITY_LABELS, SOURCE_LABELS, langFilterOptions, langLabel } from '../../constants'
 import { useAiGate } from '../../composables/useAiGate'
+import { useJobCenterStore } from '../../stores/jobCenter'
 
 const filters = ref({
   q: '',
@@ -361,12 +367,49 @@ async function disable(row: Seed) {
 const translateVisible = ref(false)
 const translateTargets = ref<string[]>([])
 const translating = ref(false)
+const jobCenter = useJobCenterStore()
+/** 重开命中的进行中翻译任务（T240）：以面板呈现，不再出现表单与「开始翻译」 */
+const translatePanelMode = ref(false)
+const translateJobId = ref<number | null>(null)
+const translateDoneHandled = ref(false)
+
+/** 当前翻译任务（store 同源）：活跃期读订阅态，终态迁移后落到 recent 仍可查 */
+const translateJob = computed<JobPayload | null>(() => {
+  const id = translateJobId.value
+  if (id == null) return null
+  return jobCenter.activeJobs[id] ?? jobCenter.recentJobs.find((row) => row.id === id) ?? null
+})
 
 async function openTranslate() {
   if (!(await requireAi())) return
+  const active = jobCenter.activeJobOfType('ai_seed_translate')
+  translatePanelMode.value = active !== null
+  translateJobId.value = active?.id ?? null
+  translateDoneHandled.value = false
   translateTargets.value = []
   translateVisible.value = true
 }
+
+/** 终态收尾（提交等待与重开面板两条路径共用；按任务去重，成功路径刷新列表） */
+async function handleTranslateTerminal(job: JobPayload) {
+  if (translateDoneHandled.value) return
+  translateDoneHandled.value = true
+  if (job.status === 'completed') {
+    const created = (job.result?.created as number) ?? 0
+    ElMessage.success(`翻译完成：新增 ${created} 条（待审核）`)
+    translateVisible.value = false
+    await load()
+  } else if (job.status === 'cancelled') {
+    ElMessage.warning('任务已取消')
+  } else {
+    ElMessage.error(job.error ?? '翻译失败')
+  }
+}
+
+// 重开面板路径：对话框开着看任务跑到终态（提交路径由 waitFor 收尾，经去重不重复提示）
+watch(translateJob, (job) => {
+  if (job && TERMINAL_STATUSES.includes(job.status)) void handleTranslateTerminal(job)
+})
 
 async function doTranslate() {
   if (!translateTargets.value.length) {
@@ -379,15 +422,10 @@ async function doTranslate() {
       seed_ids: selected.value.map((row) => row.id),
       targets: translateTargets.value,
     })
-    const job = await watchJob(job_id)
-    if (job.status === 'completed') {
-      const created = (job.result?.created as number) ?? 0
-      ElMessage.success(`翻译完成：新增 ${created} 条（待审核）`)
-      translateVisible.value = false
-      await load()
-    } else {
-      ElMessage.error(job.error ?? '翻译失败')
-    }
+    translateJobId.value = job_id
+    translateDoneHandled.value = false
+    const job = await jobCenter.waitFor(job_id)
+    await handleTranslateTerminal(job)
   } finally {
     translating.value = false
   }

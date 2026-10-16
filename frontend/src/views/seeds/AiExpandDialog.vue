@@ -5,7 +5,11 @@
     width="660px"
     @closed="reset"
   >
-    <el-form label-width="110px">
+    <!-- 进行中视图（T239/FR-011）：重开命中同类活跃任务时呈现，杜绝重复提交面 -->
+    <template v-if="panelMode && currentJob">
+      <JobRunPanel :job="currentJob" />
+    </template>
+    <el-form v-else label-width="110px">
       <el-form-item label="行业/业务描述">
         <el-input
           v-model="form.description"
@@ -47,14 +51,14 @@
           <div class="hint">{{ progressText }}</div>
         </div>
       </el-form-item>
-      <el-form-item v-if="summary">
-        <el-alert
-          type="success"
-          :closable="false"
-          :title="`新增：节点 ${summary.nodes_created ?? 0}、关系 ${summary.edges_created ?? 0}、中文母版种子 ${summary.seeds_created ?? 0}（均待审核）`"
-        />
-      </el-form-item>
     </el-form>
+    <el-alert
+      v-if="summary"
+      class="summary"
+      type="success"
+      :closable="false"
+      :title="`新增：节点 ${summary.nodes_created ?? 0}、关系 ${summary.edges_created ?? 0}、中文母版种子 ${summary.seeds_created ?? 0}（均待审核）`"
+    />
     <template #footer>
       <el-button @click="visible = false">关闭</el-button>
       <el-button
@@ -65,7 +69,7 @@
         查看调用明细
       </el-button>
       <el-button v-if="summary" type="success" plain @click="goReview">去审核</el-button>
-      <el-button type="primary" :loading="running" @click="submit">开始扩充</el-button>
+      <el-button v-if="!panelMode" type="primary" :loading="running" @click="submit">开始扩充</el-button>
     </template>
   </el-dialog>
 
@@ -74,24 +78,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../../api/client'
-import { watchJob } from '../../api/jobs'
+import JobRunPanel from '../../components/common/JobRunPanel.vue'
 import LlmCallsDrawer from '../../components/common/LlmCallsDrawer.vue'
-import type { GraphNode, Paginated } from '../../api/types'
+import type { GraphNode, JobPayload, Paginated } from '../../api/types'
 import { NODE_TYPE_LABELS } from '../../constants'
-import { parseServerTime } from '../../stores/jobCenter'
+import { TERMINAL_STATUSES } from '../../api/jobs'
+import { parseServerTime, useJobCenterStore } from '../../stores/jobCenter'
 
 const visible = ref(false)
 const emit = defineEmits<{ done: [] }>()
+const jobCenter = useJobCenterStore()
 const running = ref(false)
 const progressText = ref('')
 const summary = ref<Record<string, number> | null>(null)
 const nodes = ref<GraphNode[]>([])
 /** 本次提交产生的任务（成功/失败都保留）——明细入口按它过滤 */
 const finishedJobId = ref<number | null>(null)
+/** 重开命中的进行中任务（T239）：以面板呈现，不再出现表单与「开始扩充」 */
+const panelMode = ref(false)
+const currentJobId = ref<number | null>(null)
+const doneHandled = ref(false)
 const callsDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
 const router = useRouter()
 const form = ref({
@@ -100,7 +110,18 @@ const form = ref({
   count: 20,
 })
 
+/** 当前任务（store 同源）：活跃期读订阅态，终态迁移后落到 recent 仍可查 */
+const currentJob = computed<JobPayload | null>(() => {
+  const id = currentJobId.value
+  if (id == null) return null
+  return jobCenter.activeJobs[id] ?? jobCenter.recentJobs.find((row) => row.id === id) ?? null
+})
+
 async function open() {
+  const active = jobCenter.activeJobOfType('ai_seed_expand')
+  panelMode.value = active !== null
+  currentJobId.value = active?.id ?? null
+  doneHandled.value = false
   visible.value = true
   if (!nodes.value.length) {
     const page = await api.get<Paginated<GraphNode>>('/graph/nodes', { page_size: 500 })
@@ -113,10 +134,11 @@ function reset() {
   summary.value = null
   running.value = false
   finishedJobId.value = null
+  stopTick()
 }
 
 /**
- * 已等待秒数（自任务开始）：随 800ms 轮询刷新——前台卡住时也能看出等了多久，
+ * 已等待秒数（自任务开始）：随 1s tick 刷新——前台卡住时也能看出等了多久，
  * 配合「调用明细」判断是阻塞在单次请求还是多次重试。
  */
 function waitedSeconds(startedAt: string | null): number {
@@ -125,11 +147,54 @@ function waitedSeconds(startedAt: string | null): number {
   return Math.max(0, Math.floor((Date.now() - started) / 1000))
 }
 
+let tickTimer: ReturnType<typeof setInterval> | null = null
+
+function stopTick() {
+  if (tickTimer !== null) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
+}
+
+/** 留框等待的进度文案（FR-013）：阶段与已等待一律读 store 订阅态 */
+function refreshProgressText() {
+  const id = currentJobId.value
+  const job = id == null ? null : jobCenter.activeJobs[id]
+  if (!job) return
+  const phase = (job.progress?.phase as string) ?? ''
+  const waited = `（已等待 ${waitedSeconds(job.started_at)} 秒）`
+  if (phase === 'calling_llm') progressText.value = `大模型正在生成候选…${waited}`
+  else if (phase) progressText.value = `处理中：${phase}${waited}`
+  else progressText.value = `处理中…${waited}`
+}
+
 /** 查看本次任务发给模型的入参与原始出参（失败时尤其有用） */
 function openCalls() {
   if (finishedJobId.value == null) return
   callsDrawer.value?.open({ jobId: finishedJobId.value, title: 'AI 调用明细 · 种子扩充' })
 }
+
+/** 终态收尾（提交等待与重开面板两条路径共用；按任务去重，不重复提示） */
+function handleTerminal(job: JobPayload) {
+  finishedJobId.value = job.id
+  if (doneHandled.value) return
+  doneHandled.value = true
+  stopTick()
+  if (job.status === 'completed') {
+    summary.value = (job.result ?? {}) as Record<string, number>
+    ElMessage.success('扩充完成：结果已进入待审核')
+    emit('done')
+  } else if (job.status === 'cancelled') {
+    ElMessage.warning('任务已取消')
+  } else {
+    ElMessage.error(job.error ?? '任务失败')
+  }
+}
+
+// 重开面板路径：对话框开着看任务跑到终态（提交路径由 waitFor 收尾，经 doneHandled 去重）
+watch(currentJob, (job) => {
+  if (job && TERMINAL_STATUSES.includes(job.status)) handleTerminal(job)
+})
 
 async function submit() {
   if (!form.value.description.trim() && !form.value.from_node_ids.length) {
@@ -141,25 +206,16 @@ async function submit() {
   progressText.value = '任务已提交…'
   try {
     const { job_id } = await api.post<{ job_id: number }>('/ai/seeds/expand', form.value)
-    const job = await watchJob(job_id, (tick) => {
-      const phase = (tick.progress?.phase as string) ?? ''
-      const waited = `（已等待 ${waitedSeconds(tick.started_at)} 秒）`
-      if (phase === 'calling_llm') progressText.value = `大模型正在生成候选…${waited}`
-      else if (phase) progressText.value = `处理中：${phase}${waited}`
-      else progressText.value = `处理中…${waited}`
-    })
-    finishedJobId.value = job_id // 终态后亮出「查看调用明细」（成功/失败都可以看）
-    if (job.status === 'completed') {
-      summary.value = (job.result ?? {}) as Record<string, number>
-      ElMessage.success('扩充完成：结果已进入待审核')
-      emit('done')
-    } else {
-      ElMessage.error(job.error ?? '任务失败')
-    }
+    currentJobId.value = job_id
+    doneHandled.value = false
+    tickTimer = setInterval(refreshProgressText, 1000)
+    const job = await jobCenter.waitFor(job_id)
+    handleTerminal(job)
   } catch {
     /* 客户端已提示错误 */
   } finally {
     running.value = false
+    stopTick()
     progressText.value = summary.value ? '已完成' : progressText.value
   }
 }
@@ -177,5 +233,8 @@ defineExpose({ open })
   margin-top: 4px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.summary {
+  margin-top: 12px;
 }
 </style>
