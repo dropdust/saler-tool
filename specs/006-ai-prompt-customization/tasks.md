@@ -41,12 +41,12 @@ description: "Task list for AI 提示词自定义与辅助编写（扩充 / 起�
 
 **⚠️ CRITICAL**: 本阶段完成前，任何用户故事不得开始
 
-- [ ] T279 [P] 后端：提示词注册表（红→绿）：新建 `backend/src/saler/core/prompts/__init__.py` 与 `backend/src/saler/core/prompts/registry.py`（纯函数模块，**不得依赖 FastAPI/DB**）——
+- [X] T279 [P] 后端：提示词注册表（红→绿）：新建 `backend/src/saler/core/prompts/__init__.py` 与 `backend/src/saler/core/prompts/registry.py`（纯函数模块，**不得依赖 FastAPI/DB**）——
   ① 两功能定义（data-model.md §2.1 逐字照录）`seed_expand` / `content_draft`：展示名、默认模板全文（由现文案机械重构：`core/seeds/ai.py:build_expansion_prompt` / `core/content/ai.py:_build_draft_prompt` 的固定部分抽出为固定段，其余按原顺序入模板、动态数据处换变量 token、固定段位置留 `{output_contract}` 槽位）、固定段原文、变量目录（name/label/render 说明，data-model.md §2.2 语义表逐条落实，含边界：`{description}` 空→`""`、`{existing_nodes}` 空→`""` 且按 产品线/客户角色/市场(国家) 顺序、`{tone}` 缺省→「语气：专业、克制、以价值为先。」）、长度上限 **8000**；
   ② `compose(feature, template, context) -> str`：已知变量精确 token 替换（`str.replace`，未知 token 原样透传）、`{output_contract}` → 固定段原文、**模板缺失槽位时自动补于末尾**（`\n\n` 分隔）；
   ③ `validate_template(feature, content) -> (errors, warnings)`：空/纯空白与超长 → errors（消息含额度与当前长度）；未知变量（去重逐一、`{{...}}` 豁免：扫描正则负向断言见 research R2）、任一已知数据变量未引用（逐一）、槽位缺失 → warnings（contract §7 码表 `unknown_variable`/`missing_variable`/`missing_output_contract`）；
   ④ 渲染用标签映射自带（产品线/客户角色/市场/国家），与 `core/seeds/ai.py:NODE_TYPE_LABELS` 不互相 import（防循环依赖）；
-  新建 `backend/tests/unit/test_prompt_registry.py`——**golden 等价**：文件内以手抄现文案的 `_legacy_seed_prompt`/`_legacy_draft_prompt` 基准函数（复制自现实现，冻结历史）对代表性上下文（常规/空描述/空节点/缺省语气/边界数量）断言 `compose(默认模板) == legacy 输出` **逐字相等**（SC-002 回归口径）；渲染语义逐条、槽位替换与缺失兜底、`{{company_name}}`/`{{signature}}` 不被扫描替换、校验三警告与两错误码（contract §6/§7）→ **红→绿**
+  新建 `backend/tests/unit/test_prompt_registry.py`——**golden 等价**：文件内以手抄现文案的 `_legacy_seed_prompt`/`_legacy_draft_prompt` 基准函数（复制自现实现，冻结历史）对代表性上下文（常规/空描述/空节点/缺省语气/边界数量）断言 `compose(默认模板) == legacy 输出` **逐字相等**（SC-002 回归口径）；渲染语义逐条、槽位替换与缺失兜底、`{{company_name}}`/`{{signature}}` 不被扫描替换、校验三警告与两错误码（contract §6/§7）→ **红→绿**（2026-10-16 实作：24 项红→绿——含 9 例 golden 逐字等价与空白语气/空白描述边界；全量 422 passed）
 
 - [ ] T280 [P] 后端：设置基座（红→绿）：`backend/src/saler/services/settings_service.py` 增 `delete_value(db, key)`（删行并 commit；对不存在键幂等）；`backend/src/saler/api/routes/settings.py` 的 `put_settings` 增守卫——`key.startswith("prompt_template_")` 一律 400 `bad_request`（消息指引走 AI 提示词接口；**置于 `is_known_key` 检查之前**，防行存在后被通用端点写脏形状）；扩展 `backend/tests/contract/test_settings_api.py`（delete 幂等单测 + 通用 PUT 拒绝两类提示词键：无行时、有行时）→ **红→绿**
 
