@@ -76,6 +76,52 @@
             <pre class="contract-text" data-test="prompt-contract">{{ detail.output_contract }}</pre>
           </div>
         </el-form-item>
+
+        <el-form-item label="AI 辅助">
+          <div class="assist">
+            <div class="assist-row">
+              <el-input
+                v-model="assistIntent"
+                class="assist-intent"
+                placeholder="用一句话描述意图，例如：面向东非市场，重点发掘各国电力公司与 EPC 总包"
+                maxlength="2000"
+                data-test="assist-intent"
+              />
+              <el-button
+                :loading="assistLoading"
+                :disabled="busy"
+                data-test="assist-generate"
+                @click="onAssistGenerate"
+              >
+                AI 生成
+              </el-button>
+              <el-button
+                :loading="assistLoading"
+                :disabled="busy"
+                data-test="assist-polish"
+                @click="onAssistPolish"
+              >
+                AI 优化当前草稿
+              </el-button>
+            </div>
+            <div v-if="assistSuggestion !== null" class="assist-suggestion" data-test="assist-suggestion">
+              <div class="hint">建议（仅供对照；「采用」仅写入编辑器，记得保存才生效）：</div>
+              <pre class="contract-text">{{ assistSuggestion }}</pre>
+              <div v-if="assistNotes" class="hint" data-test="assist-notes">要点：{{ assistNotes }}</div>
+              <div class="assist-actions">
+                <el-button size="small" type="primary" plain data-test="assist-adopt" @click="adoptSuggestion">
+                  采用
+                </el-button>
+                <el-button size="small" data-test="assist-discard" @click="discardSuggestion">
+                  丢弃
+                </el-button>
+                <el-button size="small" link data-test="assist-view-calls" @click="viewAssistCalls">
+                  查看调用明细
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
       </el-form>
     </template>
 
@@ -99,6 +145,9 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <!-- 辅助调用明细（T292；append-to-body 叠在编辑器上，按 operation 过滤） -->
+  <LlmCallsDrawer ref="assistDrawer" />
 </template>
 
 <script setup lang="ts">
@@ -107,12 +156,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { InputInstance } from 'element-plus'
 import {
   activateTemplate,
+  assistPrompt,
   createTemplate,
   deleteTemplate,
   getPrompt,
   updateTemplate,
 } from '../../api/prompts'
+import type { PromptAssistPayload } from '../../api/prompts'
 import type { PromptFeatureKey, PromptTemplateDetail, PromptVariable } from '../../api/types'
+import LlmCallsDrawer from './LlmCallsDrawer.vue'
 
 const emit = defineEmits<{ changed: [feature: PromptFeatureKey] }>()
 
@@ -432,6 +484,66 @@ function attemptClose() {
   })
 }
 
+// ---- AI 辅助（T292 / FR-009~012）：单轮生成或润色；建议态呈现，"采用"≠保存 ----
+
+const assistIntent = ref('')
+const assistLoading = ref(false)
+const assistSuggestion = ref<string | null>(null)
+const assistNotes = ref<string | null>(null)
+const assistDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
+
+async function onAssistGenerate() {
+  const intent = assistIntent.value.trim()
+  if (!intent) {
+    ElMessage.warning('请先输入意图（一句话描述你想要的提示词方向）')
+    return
+  }
+  await runAssist({ mode: 'generate', intent })
+}
+
+async function onAssistPolish() {
+  if (!content.value.trim()) {
+    ElMessage.warning('编辑器内容为空，无可优化的草稿')
+    return
+  }
+  await runAssist({ mode: 'polish', draft: content.value })
+}
+
+async function runAssist(payload: PromptAssistPayload) {
+  if (assistLoading.value) return
+  assistLoading.value = true
+  try {
+    const resp = await assistPrompt(feature.value, payload)
+    assistSuggestion.value = resp.suggestion
+    assistNotes.value = resp.notes
+  } catch (err) {
+    // 编辑器内容无损（辅助失败仅影响建议区）；409 补一条前往配置的指引
+    if ((err as { code?: string } | null)?.code === 'llm_not_configured') {
+      ElMessage.warning('尚未配置大模型服务：请前往「设置 → 大模型」添加并测试后再试')
+    }
+  } finally {
+    assistLoading.value = false
+  }
+}
+
+/** 采用：建议写入编辑器（dirty）；绝不自动保存（FR-010——"采用"≠保存） */
+function adoptSuggestion() {
+  if (assistSuggestion.value === null) return
+  content.value = assistSuggestion.value
+  assistSuggestion.value = null
+  assistNotes.value = null
+  ElMessage.success('已采用建议（保存后才会对后续运行生效）')
+}
+
+function discardSuggestion() {
+  assistSuggestion.value = null
+  assistNotes.value = null
+}
+
+function viewAssistCalls() {
+  assistDrawer.value?.open({ operation: 'prompt_assist', title: 'AI 调用明细 · 提示词辅助' })
+}
+
 defineExpose({ open, visible, content, dirty })
 </script>
 
@@ -488,5 +600,22 @@ defineExpose({ open, visible, content, dirty })
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.assist {
+  width: 100%;
+}
+.assist-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.assist-intent {
+  flex: 1;
+}
+.assist-suggestion {
+  margin-top: 8px;
+}
+.assist-actions {
+  margin-top: 6px;
 }
 </style>

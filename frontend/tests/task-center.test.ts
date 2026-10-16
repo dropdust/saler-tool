@@ -3,8 +3,8 @@
  * 契约 §5「顶栏入口」「任务抽屉」行。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -55,12 +55,26 @@ function makeRouter() {
   })
 }
 
+/**
+ * 挂载过而未销毁的组件会继续向 body 传送（teleport）抽屉节点：上一个用例的
+ * body 清理只移除 DOM，僵尸实例在负载下仍可能把旧 .el-drawer 重新插回 body，
+ * 使 document.body.querySelector('.el-drawer') 命中空壳（全量并行下的偶发抖动源）。
+ * 统一在 afterEach 真正 unmount，杜绝僵尸传送。
+ */
+const mountedWrappers: VueWrapper[] = []
+
+afterEach(() => {
+  for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount()
+  document.body.innerHTML = ''
+})
+
 async function mountCenter() {
   const router = makeRouter()
   const wrapper = mount(TaskCenter, {
     global: { plugins: [ElementPlus, router, i18n] },
     attachTo: document.body,
   })
+  mountedWrappers.push(wrapper)
   await flushPromises()
   return { wrapper, router, store: useJobCenterStore() }
 }
@@ -272,6 +286,13 @@ describe('TaskCenter · 已中断与重跑（T275）', () => {
     store.recentJobs = recent as never
     await wrapper.find('[data-test="task-center-trigger"]').trigger('click')
     await flushPromises()
+    // EP Drawer 的抽屉体经过渡帧（rAF 调度）惰性挂载——全量并行运行下可能晚于一拍
+    // flushPromises（抖动源：曾出现卡片未挂载即断言的偶发失败）；等待首张卡片出现再返回。
+    await vi.waitFor(() => {
+      if (!drawerEl()?.querySelector('[data-test="recent-job"]')) {
+        throw new Error('任务抽屉最近组尚未渲染')
+      }
+    })
     return { wrapper, store }
   }
 

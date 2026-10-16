@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
-import ElementPlus, { ElMessageBox, ElSelect } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox, ElSelect } from 'element-plus'
 
 import { i18n } from '../src/i18n'
 
@@ -21,13 +21,21 @@ vi.mock('../src/api/prompts', () => ({
   assistPrompt: vi.fn(),
 }))
 
+vi.mock('../src/api/client', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+  ApiError: class ApiError extends Error {},
+  sseUrl: (path: string) => path,
+}))
+
 import {
   activateTemplate,
+  assistPrompt,
   createTemplate,
   deleteTemplate,
   getPrompt,
   updateTemplate,
 } from '../src/api/prompts'
+import { api } from '../src/api/client'
 import type { PromptTemplateDetail, PromptTemplateItem } from '../src/api/types'
 import PromptEditorDialog from '../src/components/common/PromptEditorDialog.vue'
 
@@ -36,6 +44,8 @@ const createMock = vi.mocked(createTemplate)
 const updateMock = vi.mocked(updateTemplate)
 const deleteMock = vi.mocked(deleteTemplate)
 const activateMock = vi.mocked(activateTemplate)
+const assistMock = vi.mocked(assistPrompt)
+const clientGetMock = vi.mocked(api.get)
 
 const DEFAULT =
   '你是助手。\n{description}\n{existing_nodes}\n{output_contract}\n要求：约 {count} 条。'
@@ -347,5 +357,115 @@ describe('PromptEditorDialog 关闭', () => {
     await click('prompt-close')
     expect(confirmSpy).not.toHaveBeenCalled()
     expect((wrapper.vm as unknown as Exposed).visible).toBe(false)
+  })
+})
+
+describe('PromptEditorDialog AI 辅助（T292，006 §5 / FR-009~012）', () => {
+  it('AI 生成：空意图不请求；有意图按参数调用并渲染建议；编辑器内容未变', async () => {
+    const wrapper = await mountAndOpen(detail())
+    assistMock.mockResolvedValue({ suggestion: '建议模板 {description} {output_contract}', notes: '保留变量' })
+
+    await click('assist-generate') // 空意图
+    expect(assistMock).not.toHaveBeenCalled()
+
+    await wrapper.find('input[data-test="assist-intent"]').setValue('面向东非市场')
+    await click('assist-generate')
+    expect(assistMock).toHaveBeenCalledWith('seed_expand', {
+      mode: 'generate',
+      intent: '面向东非市场',
+    })
+    expect(btn('assist-suggestion').textContent).toContain('建议模板')
+    expect(btn('assist-notes').textContent).toContain('保留变量')
+    expect(textarea().value).toBe(DEFAULT) // 建议态不自动写入
+  })
+
+  it('AI 优化当前草稿：携带编辑器当前文本；请求期间编辑器可继续编辑', async () => {
+    const wrapper = await mountAndOpen(detail())
+    await setTextarea(wrapper, '我的草稿 {description}')
+    assistMock.mockImplementation(() => new Promise(() => {}) as never) // 挂起以观察在途态
+
+    await click('assist-polish')
+    expect(assistMock).toHaveBeenCalledWith('seed_expand', {
+      mode: 'polish',
+      draft: '我的草稿 {description}',
+    })
+    expect(btn('assist-polish').classList.contains('is-loading')).toBe(true)
+    await setTextarea(wrapper, '继续编辑中')
+    expect(textarea().value).toBe('继续编辑中')
+  })
+
+  it('采用：建议写入编辑器（dirty）但不保存；关闭重开回到已保存内容', async () => {
+    const wrapper = await mountAndOpen(detail())
+    assistMock.mockResolvedValue({
+      suggestion: '采用后模板 {description} {existing_nodes} {count} {output_contract}',
+      notes: null,
+    })
+    await wrapper.find('input[data-test="assist-intent"]').setValue('x')
+    await click('assist-generate')
+    await click('assist-adopt')
+
+    expect(textarea().value).toBe('采用后模板 {description} {existing_nodes} {count} {output_contract}')
+    expect(createMock).not.toHaveBeenCalled()
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(activateMock).not.toHaveBeenCalled()
+
+    // 采用≠保存：脏关闭确认放弃后重开，已保存内容（内置默认）不变
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    await click('prompt-close')
+    ;(wrapper.vm as unknown as Exposed).open('seed_expand')
+    await flushPromises()
+    expect(textarea().value).toBe(DEFAULT)
+  })
+
+  it('丢弃：建议区消失、编辑器原文不变', async () => {
+    const wrapper = await mountAndOpen(detail())
+    assistMock.mockResolvedValue({ suggestion: 'S', notes: null })
+    await wrapper.find('input[data-test="assist-intent"]').setValue('x')
+    await click('assist-generate')
+    expect(btn('assist-suggestion')).toBeTruthy()
+
+    await click('assist-discard')
+    expect(document.body.querySelector('[data-test="assist-suggestion"]')).toBeNull()
+    expect(textarea().value).toBe(DEFAULT)
+  })
+
+  it('辅助失败：建议区不出现、编辑器内容无损、在途复位', async () => {
+    const wrapper = await mountAndOpen(detail())
+    await setTextarea(wrapper, '我的草稿')
+    assistMock.mockRejectedValue(new Error('boom'))
+    await click('assist-polish')
+    expect(document.body.querySelector('[data-test="assist-suggestion"]')).toBeNull()
+    expect(textarea().value).toBe('我的草稿')
+    expect(btn('assist-polish').classList.contains('is-loading')).toBe(false)
+  })
+
+  it('409 未配置：给出「设置 → 大模型」指引且内容无损', async () => {
+    const warningSpy = vi.spyOn(ElMessage, 'warning')
+    const wrapper = await mountAndOpen(detail())
+    await setTextarea(wrapper, '我的草稿')
+    assistMock.mockRejectedValue(
+      Object.assign(new Error('无服务'), { code: 'llm_not_configured' }),
+    )
+    await click('assist-polish')
+    expect(
+      warningSpy.mock.calls.some((call) => String(call[0]).includes('设置')),
+    ).toBe(true)
+    expect(textarea().value).toBe('我的草稿')
+  })
+
+  it('查看调用明细：以 operation=prompt_assist 打开抽屉', async () => {
+    clientGetMock.mockResolvedValue({ total: 0, items: [] })
+    const wrapper = await mountAndOpen(detail())
+    assistMock.mockResolvedValue({ suggestion: 'S', notes: null })
+    await wrapper.find('input[data-test="assist-intent"]').setValue('x')
+    await click('assist-generate')
+
+    await click('assist-view-calls')
+    expect(clientGetMock).toHaveBeenCalledWith('/ai/calls', {
+      operation: 'prompt_assist',
+      limit: 20,
+      offset: 0,
+    })
+    expect(document.body.textContent).toContain('AI 调用明细')
   })
 })
