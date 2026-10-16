@@ -62,13 +62,16 @@
     <template #footer>
       <el-button @click="visible = false">关闭</el-button>
       <el-button v-if="!panelMode" data-test="expand-prompt-entry" @click="openPrompts">
-        提示词<el-tag
-          v-if="promptCustomized !== null"
+        提示词
+        <el-tag
+          v-if="promptBadge !== null"
           class="prompt-badge"
           size="small"
-          :type="promptCustomized ? 'warning' : 'info'"
+          :type="promptBadge === '默认' ? 'info' : 'warning'"
           data-test="expand-prompt-badge"
-        >{{ promptCustomized ? '已自定义' : '默认' }}</el-tag>
+        >
+          {{ promptBadge }}
+        </el-tag>
       </el-button>
       <el-button
         v-if="finishedJobId"
@@ -118,8 +121,8 @@ const currentJobId = ref<number | null>(null)
 const doneHandled = ref(false)
 const callsDrawer = ref<InstanceType<typeof LlmCallsDrawer> | null>(null)
 const promptEditor = ref<InstanceType<typeof PromptEditorDialog> | null>(null)
-/** 提示词状态徽标（null=未知：列表未取到时不显示；FR-002 透明状态） */
-const promptCustomized = ref<boolean | null>(null)
+/** 提示词状态徽标：「默认」或生效模板名（null=未知：列表未取到时不显示；FR-002 透明状态） */
+const promptBadge = ref<string | null>(null)
 const router = useRouter()
 const form = ref({
   description: '',
@@ -151,9 +154,10 @@ async function open() {
 async function loadPromptBadge() {
   try {
     const { items } = await getPromptList()
-    promptCustomized.value = items.find((item) => item.feature === 'seed_expand')?.customized ?? null
+    const row = items.find((item) => item.feature === 'seed_expand')
+    promptBadge.value = row ? (row.customized && row.active_name ? row.active_name : '默认') : null
   } catch {
-    promptCustomized.value = null
+    promptBadge.value = null
   }
 }
 

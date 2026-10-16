@@ -220,7 +220,7 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
     }
   }
 
-  function mockPromptApis(customized: boolean) {
+  function mockPromptApis(customized: boolean, activeName: string | null = null) {
     get.mockImplementation((path: string) => {
       if (path === '/graph/nodes') {
         return Promise.resolve({ items: [], total: 0, page: 1, page_size: 500 })
@@ -228,8 +228,22 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
       if (path === '/ai/prompts') {
         return Promise.resolve({
           items: [
-            { feature: 'seed_expand', label: 'AI 扩充（种子扩充）', customized, updated_at: null },
-            { feature: 'content_draft', label: 'AI 起草（内容母版）', customized: false, updated_at: null },
+            {
+              feature: 'seed_expand',
+              label: 'AI 扩充（种子扩充）',
+              customized,
+              active_id: customized ? 't_a' : null,
+              active_name: customized ? activeName : null,
+              template_count: customized ? 1 : 0,
+            },
+            {
+              feature: 'content_draft',
+              label: 'AI 起草（内容母版）',
+              customized: false,
+              active_id: null,
+              active_name: null,
+              template_count: 0,
+            },
           ],
         })
       }
@@ -242,6 +256,10 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
     return document.body.querySelector<HTMLElement>('[data-test="expand-prompt-entry"]')
   }
 
+  function badge(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>('[data-test="expand-prompt-badge"]')
+  }
+
   it('表单态出现入口与「默认」徽标', async () => {
     mockPromptApis(false)
     await openDialog(pinia)
@@ -250,10 +268,23 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
     expect(entry()!.textContent).toContain('默认')
   })
 
-  it('已自定义状态徽标', async () => {
-    mockPromptApis(true)
+  it('已自定义：徽标显示生效模板名（T300 升级）', async () => {
+    mockPromptApis(true, '东非市场')
     await openDialog(pinia)
-    expect(entry()!.textContent).toContain('已自定义')
+    expect(entry()!.textContent).toContain('东非市场')
+    expect(entry()!.textContent).not.toContain('已自定义')
+  })
+
+  it('徽标取数失败：入口仍在、徽标不显示（不打断）', async () => {
+    get.mockImplementation((path: string) => {
+      if (path === '/graph/nodes') {
+        return Promise.resolve({ items: [], total: 0, page: 1, page_size: 500 })
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`))
+    })
+    await openDialog(pinia)
+    expect(entry()).not.toBeNull()
+    expect(badge()).toBeNull()
   })
 
   it('点击入口以 seed_expand 打开编辑器', async () => {
@@ -265,15 +296,15 @@ describe('AiExpandDialog · 提示词入口（T286，006）', () => {
     expect(document.body.textContent).toContain('AI 提示词 · AI 扩充（种子扩充）')
   })
 
-  it('编辑器 changed 回调后徽标刷新（默认 → 已自定义）', async () => {
+  it('编辑器 changed 回调后徽标刷新（默认 → 模板名）', async () => {
     mockPromptApis(false)
     const wrapper = await openDialog(pinia)
     entry()!.click()
     await flushPromises()
-    mockPromptApis(true) // 保存后服务端状态切换
+    mockPromptApis(true, '东非市场') // 保存后服务端状态切换
     wrapper.findComponent(PromptEditorDialog).vm.$emit('changed', 'seed_expand')
     await flushPromises()
-    expect(entry()!.textContent).toContain('已自定义')
+    expect(entry()!.textContent).toContain('东非市场')
   })
 
   it('进行中面板态（panelMode）不出现入口', async () => {
