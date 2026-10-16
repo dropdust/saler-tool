@@ -30,6 +30,10 @@ class SettingsUpdate(BaseModel):
 @router.put("")
 def put_settings(payload: SettingsUpdate, db: Session = Depends(get_session)) -> dict:
     for key, value in payload.values.items():
+        # 006 守卫：提示词模板键有专用域校验（/ai/prompts），通用端点一律拒绝——
+        # 必须先于 is_known_key（行存在后 is_known_key 会放行，允许写脏形状）
+        if key.startswith("prompt_template_"):
+            raise bad_request("提示词模板请通过 AI 提示词接口维护（/ai/prompts），避免绕过域校验")
         if not settings_service.is_known_key(db, key):
             raise bad_request(f"未知设置项：{key}")
         message = settings_service.value_error(key, value)

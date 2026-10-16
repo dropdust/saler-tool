@@ -65,5 +65,13 @@ def set_value(db: Session, key: str, value: Any) -> Any:
     return value
 
 
+def delete_value(db: Session, key: str) -> None:
+    """删除键（006：提示词模板"恢复默认"= 删行，行存在即"已自定义"）；不存在时幂等无副作用。"""
+    row = db.get(AppSetting, key)
+    if row is not None:
+        db.delete(row)
+        db.commit()
+
+
 def is_known_key(db: Session, key: str) -> bool:
     return key in DEFAULTS or db.get(AppSetting, key) is not None
